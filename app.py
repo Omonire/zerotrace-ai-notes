@@ -1,6 +1,8 @@
 import os
 import hashlib
 import json
+import secrets
+import time
 from flask import Flask, render_template, request, redirect, jsonify, session
 from database import init_db, get_db
 
@@ -33,13 +35,58 @@ def login_required(f):
     return decorated
 
 
-def search_notes(db, search, user_id):
+# ─── Rate Limiting ──────────────────────────────────────────
+
+LOGIN_ATTEMPTS = {}
+RATE_LIMIT_WINDOW = 900
+RATE_LIMIT_MAX = 5
+
+def check_rate_limit(ip):
+    now = time.time()
+    if ip not in LOGIN_ATTEMPTS:
+        LOGIN_ATTEMPTS[ip] = []
+    LOGIN_ATTEMPTS[ip] = [t for t in LOGIN_ATTEMPTS[ip] if now - t < RATE_LIMIT_WINDOW]
+    if len(LOGIN_ATTEMPTS[ip]) >= RATE_LIMIT_MAX:
+        return False
+    return True
+
+def record_login_attempt(ip):
+    now = time.time()
+    if ip not in LOGIN_ATTEMPTS:
+        LOGIN_ATTEMPTS[ip] = []
+    LOGIN_ATTEMPTS[ip].append(now)
+
+
+SORT_ORDERS = {
+    "newest": "created_at DESC",
+    "oldest": "created_at ASC",
+    "alpha": "title ASC",
+    "alpha_desc": "title DESC",
+}
+
+
+def get_notes_query(db, user_id, search="", sort="newest", tag_id=None, include_deleted=False):
+    conditions = ["user_id = ?"]
+    params = [user_id]
+
+    if not include_deleted:
+        conditions.append("is_deleted = 0")
+
     if search:
-        return db.execute(
-            "SELECT * FROM notes WHERE user_id = ? AND (title LIKE ? OR content LIKE ?) ORDER BY created_at DESC",
-            (user_id, f"%{search}%", f"%{search}%")
-        ).fetchall()
-    return db.execute("SELECT * FROM notes WHERE user_id = ? ORDER BY created_at DESC", (user_id,)).fetchall()
+        conditions.append("(title LIKE ? OR content LIKE ?)")
+        params.extend([f"%{search}%", f"%{search}%"])
+
+    if tag_id:
+        conditions.append("id IN (SELECT note_id FROM note_tags WHERE tag_id = ?)")
+        params.append(tag_id)
+
+    where = " AND ".join(conditions)
+    order = SORT_ORDERS.get(sort, "created_at DESC")
+
+    return db.execute(
+        f"SELECT * FROM notes WHERE {where} ORDER BY is_pinned DESC, {order}",
+        params
+    ).fetchall()
 
 
 def get_note_tags(db, note_id):
@@ -130,24 +177,58 @@ def signup():
     if "@" not in email or "." not in email:
         return jsonify({"success": False, "message": "Please enter a valid email"}), 400
 
+    ip = request.remote_addr
+    if not check_rate_limit(ip):
+        return jsonify({"success": False, "message": "Too many attempts. Try again later."}), 429
+
     db = get_db()
     try:
         existing = db.execute("SELECT id FROM users WHERE username = ? OR email = ?", (username, email)).fetchone()
         if existing:
             return jsonify({"success": False, "message": "Username or email already taken"}), 409
 
+        token = secrets.token_urlsafe(32)
         db.execute(
-            "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
-            (username, email, hash_password(password))
+            "INSERT INTO users (username, email, password, verification_token) VALUES (?, ?, ?, ?)",
+            (username, email, hash_password(password), token)
         )
         db.commit()
         user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         session["user_id"] = user["id"]
         session["username"] = user["username"]
         session["is_admin"] = user["is_admin"]
-        return jsonify({"success": True, "message": "Account created"}), 201
+        return jsonify({"success": True, "message": "Account created", "verification_token": token}), 201
     finally:
         db.close()
+
+
+@app.route("/api/verify-email", methods=["POST"])
+def verify_email():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "No data received"}), 400
+
+    token = data.get("token", "").strip()
+    if not token:
+        return jsonify({"success": False, "message": "Verification token required"}), 400
+
+    db = get_db()
+    try:
+        user = db.execute("SELECT * FROM users WHERE verification_token = ?", (token,)).fetchone()
+        if not user:
+            return jsonify({"success": False, "message": "Invalid verification token"}), 400
+
+        db.execute("UPDATE users SET email_verified = 1, verification_token = NULL WHERE id = ?", (user["id"],))
+        db.commit()
+        return jsonify({"success": True, "message": "Email verified!"})
+    finally:
+        db.close()
+
+
+@app.route("/verify", methods=["GET"])
+def verify_page():
+    token = request.args.get("token", "")
+    return render_template("verify.html", token=token)
 
 
 @app.route("/signin", methods=["GET"])
@@ -169,16 +250,22 @@ def signin():
     if not username or not password:
         return jsonify({"success": False, "message": "Username and password are required"}), 400
 
+    ip = request.remote_addr
+    if not check_rate_limit(ip):
+        return jsonify({"success": False, "message": "Too many attempts. Try again in 15 minutes."}), 429
+
     db = get_db()
     try:
         user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         if not user or user["password"] != hash_password(password):
+            record_login_attempt(ip)
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
 
+        record_login_attempt(ip)
         session["user_id"] = user["id"]
         session["username"] = user["username"]
         session["is_admin"] = user["is_admin"]
-        return jsonify({"success": True, "message": "Signed in"})
+        return jsonify({"success": True, "message": "Signed in", "email_verified": bool(user["email_verified"])})
     finally:
         db.close()
 
@@ -270,31 +357,75 @@ def home():
     if "user_id" not in session:
         return redirect("/signin")
     search = request.args.get("search", "").strip()
+    sort = request.args.get("sort", "newest").strip()
+    tag = request.args.get("tag", "").strip()
     db = get_db()
     try:
-        notes = search_notes(db, search, session["user_id"])
+        tag_id = int(tag) if tag.isdigit() else None
+        notes = get_notes_query(db, session["user_id"], search, sort, tag_id)
+        tags = db.execute("SELECT * FROM tags WHERE user_id = ? ORDER BY name", (session["user_id"],)).fetchall()
     finally:
         db.close()
-    return render_template("demo_index.html", notes=notes, search=search, username=session.get("username"))
+    return render_template("demo_index.html", notes=notes, search=search, sort=sort, tags=tags, username=session.get("username"))
+
+
+@app.route("/trash")
+def trash_page():
+    if "user_id" not in session:
+        return redirect("/signin")
+    db = get_db()
+    try:
+        notes = db.execute(
+            "SELECT * FROM notes WHERE user_id = ? AND is_deleted = 1 ORDER BY deleted_at DESC",
+            (session["user_id"],)
+        ).fetchall()
+    finally:
+        db.close()
+    return render_template("trash.html", notes=notes, username=session.get("username"))
 
 
 @app.route("/api/notes", methods=["GET"])
 @login_required
 def get_notes():
     search = request.args.get("search", "").strip()
+    sort = request.args.get("sort", "newest").strip()
+    tag = request.args.get("tag", "").strip()
     db = get_db()
     try:
-        notes = search_notes(db, search, session["user_id"])
+        tag_id = int(tag) if tag.isdigit() else None
+        notes = get_notes_query(db, session["user_id"], search, sort, tag_id)
+        result = [{
+            "id": row["id"],
+            "title": row["title"],
+            "content": row["content"],
+            "content_format": row["content_format"],
+            "is_pinned": bool(row["is_pinned"]),
+            "tags": get_note_tags(db, row["id"]),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"]
+        } for row in notes]
+    finally:
+        db.close()
+    return jsonify(result)
+
+
+@app.route("/api/notes/trash", methods=["GET"])
+@login_required
+def get_trash():
+    db = get_db()
+    try:
+        notes = db.execute(
+            "SELECT * FROM notes WHERE user_id = ? AND is_deleted = 1 ORDER BY deleted_at DESC",
+            (session["user_id"],)
+        ).fetchall()
     finally:
         db.close()
     return jsonify([{
         "id": row["id"],
         "title": row["title"],
         "content": row["content"],
-        "content_format": row["content_format"],
-        "tags": get_note_tags(db, row["id"]),
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"]
+        "deleted_at": row["deleted_at"],
+        "created_at": row["created_at"]
     } for row in notes])
 
 
@@ -313,11 +444,94 @@ def get_note(note_id):
                 "title": note["title"],
                 "content": note["content"],
                 "content_format": note["content_format"],
+                "is_pinned": bool(note["is_pinned"]),
                 "tags": get_note_tags(db, note["id"]),
                 "created_at": note["created_at"],
                 "updated_at": note["updated_at"]
             }
         })
+    finally:
+        db.close()
+
+
+@app.route("/api/notes/<int:note_id>/pin", methods=["PUT"])
+@login_required
+def toggle_pin(note_id):
+    db = get_db()
+    try:
+        note = db.execute("SELECT * FROM notes WHERE id = ? AND user_id = ?", (note_id, session["user_id"])).fetchone()
+        if not note:
+            return jsonify({"success": False, "message": "Note not found"}), 404
+
+        new_val = 0 if note["is_pinned"] else 1
+        db.execute("UPDATE notes SET is_pinned = ? WHERE id = ?", (new_val, note_id))
+        db.commit()
+        return jsonify({"success": True, "is_pinned": bool(new_val)})
+    finally:
+        db.close()
+
+
+@app.route("/api/notes/<int:note_id>/trash", methods=["PUT"])
+@login_required
+def trash_note(note_id):
+    db = get_db()
+    try:
+        note = db.execute("SELECT * FROM notes WHERE id = ? AND user_id = ?", (note_id, session["user_id"])).fetchone()
+        if not note:
+            return jsonify({"success": False, "message": "Note not found"}), 404
+
+        db.execute("UPDATE notes SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (note_id,))
+        db.commit()
+        return jsonify({"success": True, "message": "Note moved to trash"})
+    finally:
+        db.close()
+
+
+@app.route("/api/notes/<int:note_id>/restore", methods=["PUT"])
+@login_required
+def restore_note(note_id):
+    db = get_db()
+    try:
+        note = db.execute("SELECT * FROM notes WHERE id = ? AND user_id = ?", (note_id, session["user_id"])).fetchone()
+        if not note:
+            return jsonify({"success": False, "message": "Note not found"}), 404
+
+        db.execute("UPDATE notes SET is_deleted = 0, deleted_at = NULL WHERE id = ?", (note_id,))
+        db.commit()
+        return jsonify({"success": True, "message": "Note restored"})
+    finally:
+        db.close()
+
+
+@app.route("/api/notes/<int:note_id>/permanent", methods=["DELETE"])
+@login_required
+def permanent_delete(note_id):
+    db = get_db()
+    try:
+        note = db.execute("SELECT * FROM notes WHERE id = ? AND user_id = ?", (note_id, session["user_id"])).fetchone()
+        if not note:
+            return jsonify({"success": False, "message": "Note not found"}), 404
+
+        db.execute("DELETE FROM note_tags WHERE note_id = ?", (note_id,))
+        db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+        db.commit()
+        return jsonify({"success": True, "message": "Note permanently deleted"})
+    finally:
+        db.close()
+
+
+@app.route("/api/trash/empty", methods=["DELETE"])
+@login_required
+def empty_trash():
+    db = get_db()
+    try:
+        note_ids = [r["id"] for r in db.execute("SELECT id FROM notes WHERE user_id = ? AND is_deleted = 1", (session["user_id"],)).fetchall()]
+        if note_ids:
+            placeholders = ",".join("?" * len(note_ids))
+            db.execute(f"DELETE FROM note_tags WHERE note_id IN ({placeholders})", note_ids)
+            db.execute(f"DELETE FROM notes WHERE id IN ({placeholders})", note_ids)
+            db.commit()
+        return jsonify({"success": True, "message": f"Trash emptied ({len(note_ids)} notes)"})
     finally:
         db.close()
 
@@ -425,12 +639,12 @@ def delete_note(note_id):
         if not existing:
             return jsonify({"success": False, "message": "Note not found"}), 404
 
-        db.execute("DELETE FROM notes WHERE id = ? AND user_id = ?", (note_id, session["user_id"]))
+        db.execute("UPDATE notes SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?", (note_id, session["user_id"]))
         db.commit()
     finally:
         db.close()
 
-    return jsonify({"success": True, "message": "Note deleted successfully"})
+    return jsonify({"success": True, "message": "Note moved to trash"})
 
 
 # ─── AI Routes ──────────────────────────────────────────────────

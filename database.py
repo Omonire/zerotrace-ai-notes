@@ -24,7 +24,11 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             content TEXT NOT NULL,
+            content_format TEXT DEFAULT 'plain',
             user_id INTEGER DEFAULT NULL,
+            is_pinned INTEGER DEFAULT 0,
+            is_deleted INTEGER DEFAULT 0,
+            deleted_at TIMESTAMP DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
@@ -45,6 +49,8 @@ def init_db():
             email TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
             is_admin INTEGER DEFAULT 0,
+            email_verified INTEGER DEFAULT 0,
+            verification_token TEXT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -78,24 +84,45 @@ def init_db():
             FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip_address TEXT NOT NULL,
+            username TEXT,
+            attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     db.commit()
 
-    # Migrate: add user_id to notes if missing
+    # Migrations
     cols = [r[1] for r in db.execute("PRAGMA table_info(notes)").fetchall()]
-    if "user_id" not in cols:
-        db.execute("ALTER TABLE notes ADD COLUMN user_id INTEGER DEFAULT NULL")
-        db.commit()
+    migrations = {
+        "user_id": "ALTER TABLE notes ADD COLUMN user_id INTEGER DEFAULT NULL",
+        "content_format": "ALTER TABLE notes ADD COLUMN content_format TEXT DEFAULT 'plain'",
+        "is_pinned": "ALTER TABLE notes ADD COLUMN is_pinned INTEGER DEFAULT 0",
+        "is_deleted": "ALTER TABLE notes ADD COLUMN is_deleted INTEGER DEFAULT 0",
+        "deleted_at": "ALTER TABLE notes ADD COLUMN deleted_at TIMESTAMP DEFAULT NULL",
+    }
+    for col, sql in migrations.items():
+        if col not in cols:
+            db.execute(sql)
+            db.commit()
 
-    # Migrate: add content_format to notes if missing
-    if "content_format" not in cols:
-        db.execute("ALTER TABLE notes ADD COLUMN content_format TEXT DEFAULT 'plain'")
-        db.commit()
+    user_cols = [r[1] for r in db.execute("PRAGMA table_info(users)").fetchall()]
+    user_migrations = {
+        "email_verified": "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0",
+        "verification_token": "ALTER TABLE users ADD COLUMN verification_token TEXT DEFAULT NULL",
+    }
+    for col, sql in user_migrations.items():
+        if col not in user_cols:
+            db.execute(sql)
+            db.commit()
 
     # Auto-seed default admin
     admin = db.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
     if not admin:
         db.execute(
-            "INSERT INTO users (username, email, password, is_admin) VALUES (?, ?, ?, 1)",
+            "INSERT INTO users (username, email, password, is_admin, email_verified) VALUES (?, ?, ?, 1, 1)",
             ("admin", "admin@zerotrace.com", hash_password("admin123"))
         )
         db.commit()

@@ -7,8 +7,10 @@
   const submitBtn = document.getElementById("submit-btn");
   const cancelBtn = document.getElementById("editor-cancel");
   const searchInput = document.getElementById("search-input");
+  const sortSelect = document.getElementById("sort-select");
   const filterTag = document.getElementById("filter-tag");
   const notesGrid = document.getElementById("notes-grid");
+  const loadingSkeletons = document.getElementById("loading-skeletons");
   const emptyState = document.getElementById("empty-state");
   const noResults = document.getElementById("no-results");
   const notesCount = document.getElementById("notes-count");
@@ -23,7 +25,7 @@
   const addTagBtn = document.getElementById("add-tag-btn");
   const tagDropdown = document.getElementById("tag-dropdown");
   const tagList = document.getElementById("tag-list");
-  const selectedTags = document.getElementById("selected-tags");
+  const selectedTagsEl = document.getElementById("selected-tags");
   const newTagName = document.getElementById("new-tag-name");
   const newTagColor = document.getElementById("new-tag-color");
   const createTagBtn = document.getElementById("create-tag-btn");
@@ -36,7 +38,6 @@
   let selectedTagIds = [];
   let quill;
 
-  // ─── Quill Editor ────────────────────────────────────────
   function initQuill() {
     quill = new Quill("#editor-container", {
       theme: "snow",
@@ -54,12 +55,9 @@
   }
   initQuill();
 
-  // ─── Toast ───────────────────────────────────────────────
   function showToast(message, type = "success") {
     const toast = document.createElement("div");
-    const colors = type === "error"
-      ? "bg-red-500/90 text-white"
-      : type === "ai" ? "bg-accent/90 text-white" : "bg-green-500/90 text-white";
+    const colors = type === "error" ? "bg-red-500/90 text-white" : type === "ai" ? "bg-accent/90 text-white" : "bg-green-500/90 text-white";
     toast.className = `px-4 py-3 rounded-xl text-sm font-medium shadow-lg ${colors} backdrop-blur-sm`;
     toast.textContent = message;
     toastContainer.appendChild(toast);
@@ -100,7 +98,6 @@
       const res = await fetch("/api/tags");
       allTags = await res.json();
       renderTagDropdown();
-      renderFilterTag();
     } catch {}
   }
 
@@ -120,15 +117,8 @@
         `).join("");
   }
 
-  function renderFilterTag() {
-    const val = filterTag.value;
-    filterTag.innerHTML = '<option value="">All tags</option>' +
-      allTags.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
-    filterTag.value = val;
-  }
-
   function renderSelectedTags() {
-    selectedTags.innerHTML = selectedTagIds.map(id => {
+    selectedTagsEl.innerHTML = selectedTagIds.map(id => {
       const t = allTags.find(x => x.id === id);
       if (!t) return "";
       return `<span class="inline-flex items-center gap-1 bg-accent/10 border border-accent/20 text-accent text-xs px-2 py-1 rounded-lg">
@@ -158,10 +148,9 @@
           selectedTagIds = selectedTagIds.filter(id => id !== tagId);
           renderTagDropdown();
           renderSelectedTags();
-          renderFilterTag();
           showToast("Tag deleted");
         }
-      } catch { showToast("Failed to delete tag", "error"); }
+      } catch { showToast("Failed", "error"); }
       return;
     }
     const item = e.target.closest("[data-tag-id]");
@@ -175,7 +164,7 @@
     }
   });
 
-  selectedTags.addEventListener("click", (e) => {
+  selectedTagsEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".remove-tag");
     if (btn) {
       selectedTagIds = selectedTagIds.filter(id => id !== parseInt(btn.dataset.tagId));
@@ -199,13 +188,10 @@
         selectedTagIds.push(data.tag.id);
         renderTagDropdown();
         renderSelectedTags();
-        renderFilterTag();
         newTagName.value = "";
         showToast("Tag created");
-      } else {
-        showToast(data.message, "error");
-      }
-    } catch { showToast("Failed to create tag", "error"); }
+      } else { showToast(data.message, "error"); }
+    } catch { showToast("Failed", "error"); }
   });
 
   document.addEventListener("click", (e) => {
@@ -239,10 +225,7 @@
     const title = titleInput.value.trim();
     const content = quill.root.innerHTML.trim();
     const plainText = stripHtml(content).trim();
-    if (!title || !plainText) {
-      showToast("Title and content are required", "error");
-      return;
-    }
+    if (!title || !plainText) { showToast("Title and content required", "error"); return; }
 
     const editId = editIdField.value;
     const url = editId ? `/api/notes/${editId}` : "/api/notes";
@@ -259,18 +242,28 @@
         showToast(editId ? "Note updated" : "Note created");
         resetEditor();
         fetchAndRender();
-      } else {
-        showToast(data.message || "Something went wrong", "error");
-      }
-    } catch {
-      showToast("Network error", "error");
-    }
+      } else { showToast(data.message || "Failed", "error"); }
+    } catch { showToast("Network error", "error"); }
   });
 
   // ─── Notes Events ────────────────────────────────────────
   notesGrid.addEventListener("click", async (e) => {
     const editBtn = e.target.closest(".btn-edit");
     const deleteBtn = e.target.closest(".btn-delete");
+    const pinBtn = e.target.closest(".btn-pin");
+
+    if (pinBtn) {
+      const id = pinBtn.dataset.id;
+      try {
+        const res = await fetch(`/api/notes/${id}/pin`, { method: "PUT" });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.is_pinned ? "Note pinned" : "Note unpinned");
+          fetchAndRender();
+        }
+      } catch { showToast("Failed", "error"); }
+      return;
+    }
 
     if (editBtn) {
       const id = editBtn.dataset.id;
@@ -279,14 +272,10 @@
         const data = await res.json();
         if (!data.success) return showToast("Note not found", "error");
         const note = data.note;
-
         editIdField.value = note.id;
         titleInput.value = note.title;
-        if (note.content_format === "html") {
-          quill.root.innerHTML = note.content;
-        } else {
-          quill.setText(note.content);
-        }
+        if (note.content_format === "html") { quill.root.innerHTML = note.content; }
+        else { quill.setText(note.content); }
         selectedTagIds = (note.tags || []).map(t => t.id);
         renderSelectedTags();
         editorTitle.textContent = "Edit note";
@@ -294,31 +283,24 @@
         cancelBtn.style.display = "inline-flex";
         titleInput.focus();
         window.scrollTo({ top: 0, behavior: "smooth" });
-      } catch {
-        showToast("Failed to load note", "error");
-      }
+      } catch { showToast("Failed to load note", "error"); }
     }
 
     if (deleteBtn) {
       const id = deleteBtn.dataset.id;
-      if (!confirm("Delete this note?")) return;
+      if (!confirm("Move this note to trash?")) return;
       try {
         const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
         const data = await res.json();
-        if (data.success) {
-          showToast("Note deleted");
-          fetchAndRender();
-        } else {
-          showToast(data.message || "Failed to delete", "error");
-        }
-      } catch {
-        showToast("Network error", "error");
-      }
+        if (data.success) { showToast("Note moved to trash"); fetchAndRender(); }
+        else { showToast(data.message || "Failed", "error"); }
+      } catch { showToast("Network error", "error"); }
     }
   });
 
   function renderNotes(notes) {
     notesGrid.innerHTML = "";
+    loadingSkeletons.classList.add("hidden");
     if (notes.length === 0) {
       const hasSearch = searchInput.value.trim().length > 0;
       const hasFilter = filterTag.value !== "";
@@ -336,18 +318,25 @@
       const isUpdated = note.updated_at !== note.created_at;
       const dateDisplay = isUpdated ? `Updated ${formatDate(note.updated_at)}` : formatDate(note.created_at);
       const contentPreview = note.content_format === "html" ? stripHtml(note.content) : note.content;
+      const isPinned = note.is_pinned;
 
       const card = document.createElement("article");
-      card.className = "bg-surface border border-border rounded-2xl p-5 hover:border-accent/30 transition-colors group";
+      card.className = `bg-surface border border-border rounded-2xl p-5 hover:border-accent/30 transition-colors group ${isPinned ? "border-accent/40 bg-accent/5" : ""}`;
       card.dataset.id = note.id;
       card.innerHTML = `
         <div class="mb-4">
-          <h3 class="font-bold mb-2 group-hover:text-accent transition-colors">${escapeHtml(note.title)}</h3>
+          <div class="flex items-center gap-2 mb-2">
+            ${isPinned ? '<svg class="w-3.5 h-3.5 text-accent flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>' : ''}
+            <h3 class="font-bold group-hover:text-accent transition-colors ${isPinned ? "text-accent" : ""}">${escapeHtml(note.title)}</h3>
+          </div>
           <p class="text-sm text-gray-400 leading-relaxed line-clamp-3">${escapeHtml(contentPreview)}</p>
         </div>
         <div class="flex items-center justify-between pt-3 border-t border-border">
           <time class="text-xs text-gray-500">${dateDisplay}</time>
           <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button class="btn-pin p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-accent transition-colors" data-id="${note.id}" title="${isPinned ? "Unpin" : "Pin"}">
+              <svg width="14" height="14" fill="${isPinned ? "currentColor" : "none"}" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
+            </button>
             <button class="btn-edit p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors" data-id="${note.id}" title="Edit">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>
             </button>
@@ -361,7 +350,7 @@
     });
   }
 
-  // ─── AI Actions ──────────────────────────────────────────
+  // ─── AI ──────────────────────────────────────────────────
   async function fetchAiUsage() {
     try {
       const res = await fetch("/api/ai/usage");
@@ -377,11 +366,9 @@
     const action = btn.dataset.action;
     const content = stripHtml(quill.root.innerHTML).trim();
     if (!content) { showToast("Write something first", "error"); return; }
-
     btn.disabled = true;
     aiLoading.classList.remove("hidden");
     hideAiResult();
-
     try {
       const res = await fetch(`/api/ai/${action}`, {
         method: "POST",
@@ -395,27 +382,22 @@
         aiResult.classList.remove("hidden");
         showToast(`AI ${action} complete`, "ai");
         fetchAiUsage();
-      } else {
-        showToast(data.message || "AI failed", "error");
-      }
+      } else { showToast(data.message || "AI failed", "error"); }
     } catch { showToast("Network error", "error"); }
     finally { btn.disabled = false; aiLoading.classList.add("hidden"); }
   });
 
-  aiApply.addEventListener("click", () => {
-    quill.setText(aiResultContent);
-    hideAiResult();
-    showToast("AI result applied");
-  });
-
+  aiApply.addEventListener("click", () => { quill.setText(aiResultContent); hideAiResult(); showToast("AI result applied"); });
   aiDiscard.addEventListener("click", hideAiResult);
 
-  // ─── Search & Filter ─────────────────────────────────────
+  // ─── Search, Sort, Filter ────────────────────────────────
   function buildUrl() {
     const q = searchInput.value.trim();
+    const sort = sortSelect.value;
     const tag = filterTag.value;
     const params = new URLSearchParams();
     if (q) params.set("search", q);
+    if (sort !== "newest") params.set("sort", sort);
     if (tag) params.set("tag", tag);
     const qs = params.toString();
     return qs ? `/app?${qs}` : "/app";
@@ -423,88 +405,57 @@
 
   searchInput.addEventListener("input", () => {
     clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => {
-      window.history.pushState({}, "", buildUrl());
-      fetchAndRender();
-    }, 300);
+    searchTimeout = setTimeout(() => { window.history.pushState({}, "", buildUrl()); fetchAndRender(); }, 300);
   });
 
-  filterTag.addEventListener("change", () => {
-    window.history.pushState({}, "", buildUrl());
-    fetchAndRender();
-  });
+  sortSelect.addEventListener("change", () => { window.history.pushState({}, "", buildUrl()); fetchAndRender(); });
+  filterTag.addEventListener("change", () => { window.history.pushState({}, "", buildUrl()); fetchAndRender(); });
 
   async function fetchAndRender() {
     const q = searchInput.value.trim();
+    const sort = sortSelect.value;
     const tag = filterTag.value;
     const params = new URLSearchParams();
     if (q) params.set("search", q);
+    if (sort !== "newest") params.set("sort", sort);
     if (tag) params.set("tag", tag);
     const qs = params.toString();
     const url = qs ? `/api/notes?${qs}` : "/api/notes";
+
+    loadingSkeletons.classList.remove("hidden");
+    notesGrid.innerHTML = "";
 
     try {
       const res = await fetch(url);
       if (res.status === 401) { window.location.href = "/signin"; return; }
       const notes = await res.json();
       renderNotes(notes);
-    } catch { showToast("Failed to load notes", "error"); }
+    } catch { showToast("Failed to load notes", "error"); loadingSkeletons.classList.add("hidden"); }
   }
 
   window.addEventListener("popstate", () => {
     const params = new URLSearchParams(window.location.search);
     searchInput.value = params.get("search") || "";
+    sortSelect.value = params.get("sort") || "newest";
     filterTag.value = params.get("tag") || "";
     fetchAndRender();
   });
 
   // ─── Keyboard Shortcuts ──────────────────────────────────
   document.addEventListener("keydown", (e) => {
-    const isInput = e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable;
-
-    // Ctrl+S - Save
-    if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-      e.preventDefault();
-      form.dispatchEvent(new Event("submit", { cancelable: true }));
-    }
-
-    // Ctrl+N - New note
-    if ((e.ctrlKey || e.metaKey) && e.key === "n") {
-      e.preventDefault();
-      resetEditor();
-      titleInput.focus();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-
-    // Ctrl+K - Search
-    if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-      e.preventDefault();
-      searchInput.focus();
-      searchInput.select();
-    }
-
-    // Ctrl+/ - Show shortcuts
-    if ((e.ctrlKey || e.metaKey) && e.key === "/") {
-      e.preventDefault();
-      shortcutsModal.classList.toggle("hidden");
-    }
-
-    // Escape - Close
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); form.dispatchEvent(new Event("submit", { cancelable: true })); }
+    if ((e.ctrlKey || e.metaKey) && e.key === "n") { e.preventDefault(); resetEditor(); titleInput.focus(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); searchInput.focus(); searchInput.select(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === "/") { e.preventDefault(); shortcutsModal.classList.toggle("hidden"); }
     if (e.key === "Escape") {
-      if (!shortcutsModal.classList.contains("hidden")) {
-        shortcutsModal.classList.add("hidden");
-      } else if (tagDropdown && !tagDropdown.classList.contains("hidden")) {
-        tagDropdown.classList.add("hidden");
-      } else if (cancelBtn.style.display !== "none") {
-        resetEditor();
-      }
+      if (!shortcutsModal.classList.contains("hidden")) shortcutsModal.classList.add("hidden");
+      else if (!tagDropdown.classList.contains("hidden")) tagDropdown.classList.add("hidden");
+      else if (cancelBtn.style.display !== "none") resetEditor();
     }
   });
 
   closeShortcuts.addEventListener("click", () => shortcutsModal.classList.add("hidden"));
-  shortcutsModal.addEventListener("click", (e) => {
-    if (e.target === shortcutsModal) shortcutsModal.classList.add("hidden");
-  });
+  shortcutsModal.addEventListener("click", (e) => { if (e.target === shortcutsModal) shortcutsModal.classList.add("hidden"); });
 
   // ─── Init ────────────────────────────────────────────────
   loadTags();
