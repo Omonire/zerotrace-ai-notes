@@ -1,7 +1,9 @@
 import sqlite3
 import os
 
-DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'AI_Notes.db')
+Dir_name = os.path.abspath(__file__)
+path_dir_name = os.path.dirname(Dir_name)
+DATABASE = os.path.join(path_dir_name, 'AI_Notes.db')
 
 
 def get_db():
@@ -33,7 +35,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
-            password TEXT,
+            email TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            is_admin INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)

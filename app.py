@@ -1,5 +1,6 @@
 import os
-from flask import Flask, render_template, request, redirect, jsonify
+import hashlib
+from flask import Flask, render_template, request, redirect, jsonify, session
 from database import init_db, get_db
 
 try:
@@ -15,6 +16,10 @@ init_db()
 
 from auth import auth_bp
 app.register_blueprint(auth_bp)
+
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
 def search_notes(db, search):
@@ -63,6 +68,172 @@ def join_waitlist():
     finally:
         db.close()
 
+
+# ─── Auth Routes ────────────────────────────────────────────────
+
+@app.route("/signup", methods=["GET"])
+def signup_page():
+    if "user_id" in session:
+        return redirect("/app")
+    return render_template("signup.html")
+
+
+@app.route("/api/signup", methods=["POST"])
+def signup():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "No data received"}), 400
+
+    username = data.get("username", "").strip()
+    email = data.get("email", "").strip()
+    password = data.get("password", "").strip()
+
+    if not username or not email or not password:
+        return jsonify({"success": False, "message": "All fields are required"}), 400
+
+    if len(username) < 3:
+        return jsonify({"success": False, "message": "Username must be at least 3 characters"}), 400
+
+    if len(password) < 6:
+        return jsonify({"success": False, "message": "Password must be at least 6 characters"}), 400
+
+    if "@" not in email or "." not in email:
+        return jsonify({"success": False, "message": "Please enter a valid email"}), 400
+
+    db = get_db()
+    try:
+        existing = db.execute("SELECT id FROM users WHERE username = ? OR email = ?", (username, email)).fetchone()
+        if existing:
+            return jsonify({"success": False, "message": "Username or email already taken"}), 409
+
+        db.execute(
+            "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
+            (username, email, hash_password(password))
+        )
+        db.commit()
+        user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        session["user_id"] = user["id"]
+        session["username"] = user["username"]
+        session["is_admin"] = user["is_admin"]
+        return jsonify({"success": True, "message": "Account created"}), 201
+    finally:
+        db.close()
+
+
+@app.route("/signin", methods=["GET"])
+def signin_page():
+    if "user_id" in session:
+        return redirect("/app")
+    return render_template("signin.html")
+
+
+@app.route("/api/signin", methods=["POST"])
+def signin():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "No data received"}), 400
+
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+
+    if not username or not password:
+        return jsonify({"success": False, "message": "Username and password are required"}), 400
+
+    db = get_db()
+    try:
+        user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        if not user or user["password"] != hash_password(password):
+            return jsonify({"success": False, "message": "Invalid username or password"}), 401
+
+        session["user_id"] = user["id"]
+        session["username"] = user["username"]
+        session["is_admin"] = user["is_admin"]
+        return jsonify({"success": True, "message": "Signed in"})
+    finally:
+        db.close()
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
+
+
+# ─── Superadmin ─────────────────────────────────────────────────
+
+@app.route("/superadmin/dashboard")
+def superadmin_dashboard():
+    if not session.get("is_admin"):
+        return redirect("/signin")
+
+    db = get_db()
+    try:
+        total_users = db.execute("SELECT COUNT(*) as count FROM users").fetchone()["count"]
+        total_notes = db.execute("SELECT COUNT(*) as count FROM notes").fetchone()["count"]
+        total_waitlist = db.execute("SELECT COUNT(*) as count FROM waitlist").fetchone()["count"]
+
+        users = db.execute("SELECT id, username, email, is_admin, created_at FROM users ORDER BY created_at DESC").fetchall()
+        recent_notes = db.execute("SELECT id, title, created_at FROM notes ORDER BY created_at DESC LIMIT 10").fetchall()
+
+        users_per_day = db.execute("""
+            SELECT DATE(created_at) as day, COUNT(*) as count
+            FROM users
+            GROUP BY DATE(created_at)
+            ORDER BY day DESC
+            LIMIT 30
+        """).fetchall()
+
+        notes_per_day = db.execute("""
+            SELECT DATE(created_at) as day, COUNT(*) as count
+            FROM notes
+            GROUP BY DATE(created_at)
+            ORDER BY day DESC
+            LIMIT 30
+        """).fetchall()
+
+        waitlist_per_day = db.execute("""
+            SELECT DATE(created_at) as day, COUNT(*) as count
+            FROM waitlist
+            GROUP BY DATE(created_at)
+            ORDER BY day DESC
+            LIMIT 30
+        """).fetchall()
+    finally:
+        db.close()
+
+    return render_template("superadmin.html",
+        total_users=total_users,
+        total_notes=total_notes,
+        total_waitlist=total_waitlist,
+        users=users,
+        recent_notes=recent_notes,
+        users_per_day=users_per_day,
+        notes_per_day=notes_per_day,
+        waitlist_per_day=waitlist_per_day
+    )
+
+
+@app.route("/api/admin/users", methods=["GET"])
+def admin_get_users():
+    if not session.get("is_admin"):
+        return jsonify({"success": False, "message": "Unauthorized"}), 403
+
+    db = get_db()
+    try:
+        users = db.execute("SELECT id, username, email, is_admin, created_at FROM users ORDER BY created_at DESC").fetchall()
+    finally:
+        db.close()
+
+    return jsonify([{
+        "id": u["id"],
+        "username": u["username"],
+        "email": u["email"],
+        "is_admin": bool(u["is_admin"]),
+        "created_at": u["created_at"]
+    } for u in users])
+
+
+# ─── App Routes ─────────────────────────────────────────────────
 
 @app.route("/app")
 def home():

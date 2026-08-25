@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin Dashboard - ZeroTrace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/fscss@1.1.25/exec.min.js" defer></script>
+    <link type="text/fscss" href="{{ url_for('static', filename='css/style.fscss') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">Zero<span>Trace</span></a>
+            <div class="nav-links">
+                <span class="nav-badge">Admin</span>
+                <a href="/app" class="btn-ghost">App</a>
+                <a href="/logout" class="btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="admin-page">
+        <div class="admin-header">
+            <h1>Dashboard</h1>
+            <p>Overview of your platform</p>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Users</div>
+                <div class="stat-value" id="stat-users">{{ total_users }}</div>
+                <div class="stat-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Notes</div>
+                <div class="stat-value" id="stat-notes">{{ total_notes }}</div>
+                <div class="stat-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Waitlist Signups</div>
+                <div class="stat-value" id="stat-waitlist">{{ total_waitlist }}</div>
+                <div class="stat-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h3>Users Over Time</h3>
+                <canvas id="chart-users"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Notes Over Time</h3>
+                <canvas id="chart-notes"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Waitlist Over Time</h3>
+                <canvas id="chart-waitlist"></canvas>
+            </div>
+        </div>
+
+        <div class="admin-tables">
+            <div class="table-card">
+                <h3>All Users</h3>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Joined</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>{{ user['id'] }}</td>
+                                <td>{{ user['username'] }}</td>
+                                <td>{{ user['email'] }}</td>
+                                <td>
+                                    {% if user['is_admin'] %}
+                                        <span class="badge badge-admin">Admin</span>
+                                    {% else %}
+                                        <span class="badge">User</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ user['created_at'] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="table-card">
+                <h3>Recent Notes</h3>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Title</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for note in recent_notes %}
+                            <tr>
+                                <td>{{ note['id'] }}</td>
+                                <td>{{ note['title'] }}</td>
+                                <td>{{ note['created_at'] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+    const chartDefaults = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: {
+                grid: { color: 'rgba(31,35,51,0.5)' },
+                ticks: { color: '#6b7280', font: { size: 11 } }
+            },
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(31,35,51,0.5)' },
+                ticks: { color: '#6b7280', font: { size: 11 }, stepSize: 1 }
+            }
+        }
+    };
+
+    function makeChart(id, labels, data, color) {
+        new Chart(document.getElementById(id), {
+            type: 'line',
+            data: {
+                labels: labels.reverse(),
+                datasets: [{
+                    data: data.reverse(),
+                    borderColor: color,
+                    backgroundColor: color + '15',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    pointBackgroundColor: color
+                }]
+            },
+            options: { ...chartDefaults }
+        });
+    }
+
+    makeChart('chart-users',
+        {{ users_per_day | map(attribute='day') | list | tojson }},
+        {{ users_per_day | map(attribute='count') | list | tojson }},
+        '#7c5cff'
+    );
+    makeChart('chart-notes',
+        {{ notes_per_day | map(attribute='day') | list | tojson }},
+        {{ notes_per_day | map(attribute='count') | list | tojson }},
+        '#22c55e'
+    );
+    makeChart('chart-waitlist',
+        {{ waitlist_per_day | map(attribute='day') | list | tojson }},
+        {{ waitlist_per_day | map(attribute='count') | list | tojson }},
+        '#3b82f6'
+    );
+    </script>
+</body>
+</html>
