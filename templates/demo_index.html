@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Notes (ZeroTrace)</title>
+    <meta name="description" content="AI-powered notes by ZeroTrace. Capture, organize, and understand your ideas.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/fscss@1.1.25/exec.min.js" defer></script>
+    <link type="text/fscss" href="{{ url_for('static', filename='css/style.fscss') }}">
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">Zero<span>Trace</span></a>
+            <div class="nav-links">
+                <span class="nav-badge">AI Notes - V1</span>
+                <a href="/" class="btn-ghost">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="app">
+
+        <section class="hero">
+            <h1>Your thoughts.<br><span>Smarter.</span></h1>
+            <p>Capture your ideas, organize your thoughts, and eventually let AI help you understand them.</p>
+        </section>
+
+        <section class="editor" id="editor">
+            <div class="editor-header">
+                <h2 id="editor-title">Create a note</h2>
+                <button type="button" class="btn-ghost" id="editor-cancel" style="display:none;">Cancel</button>
+            </div>
+            <form id="note-form">
+                <input type="hidden" id="edit-note-id" value="">
+                <div class="form-group">
+                    <input id="note-title" type="text" placeholder="Note title" autocomplete="off" required>
+                </div>
+                <div class="form-group">
+                    <textarea id="note-content" placeholder="Start writing..." rows="5" required></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary" id="submit-btn">Save Note</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="notes-section">
+            <div class="notes-toolbar">
+                <div class="notes-info">
+                    <h2>Your Notes</h2>
+                    <span class="notes-count" id="notes-count">{{ notes|length }} note{{ 's' if notes|length != 1 else '' }}</span>
+                </div>
+                <div class="search-box">
+                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="text" id="search-input" placeholder="Search notes..." value="{{ search }}">
+                </div>
+            </div>
+
+            <div class="notes-grid" id="notes-grid">
+                {% if notes %}
+                    {% for note in notes %}
+                        <article class="note-card" data-id="{{ note['id'] }}">
+                            <div class="note-card-body">
+                                <h3 class="note-card-title">{{ note['title'] }}</h3>
+                                <p class="note-card-content">{{ note['content'] }}</p>
+                            </div>
+                            <div class="note-card-footer">
+                                <time class="note-date" datetime="{{ note['created_at'] }}">
+                                    {% if note['updated_at'] != note['created_at'] %}
+                                        Updated {{ note['updated_at'] }}
+                                    {% else %}
+                                        {{ note['created_at'] }}
+                                    {% endif %}
+                                </time>
+                                <div class="note-actions">
+                                    <button class="btn-icon btn-edit" data-id="{{ note['id'] }}" title="Edit note">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                                    </button>
+                                    <button class="btn-icon btn-delete" data-id="{{ note['id'] }}" title="Delete note">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </article>
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            <div class="empty-state" id="empty-state" style="display: {{ 'none' if notes else 'block' }}">
+                <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                <h3>No notes yet</h3>
+                <p>Create your first note above to get started.</p>
+            </div>
+
+            <div class="no-results" id="no-results" style="display: none;">
+                <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <h3>No results found</h3>
+                <p>Try a different search term.</p>
+            </div>
+        </section>
+
+    </main>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

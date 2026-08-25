@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ZeroTrace - AI Notes</title>
+    <meta name="description" content="Capture your thoughts. Build smarter workflows. AI Notes by ZeroTrace, the first step toward Workflow AI.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/fscss@1.1.25/exec.min.js" defer></script>
+    <link type="text/fscss" href="{{ url_for('static', filename='css/style.fscss') }}">
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">Zero<span>Trace</span></a>
+            <div class="nav-links">
+                <a href="/waitlist" class="btn-ghost">Join Waitlist</a>
+                <a href="/app" class="btn-primary btn-sm">Try V1</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="landing">
+
+        <section class="landing-hero">
+            <div class="landing-hero-badge">AI Notes V1 is live</div>
+            <h1>Capture your thoughts.<br><span>Build smarter workflows.</span></h1>
+            <p class="landing-subtitle">AI Notes is the first step toward a smarter workflow platform. Write, organize, and manage your notes. AI-powered features coming next.</p>
+            <div class="landing-actions">
+                <a href="/app" class="btn-primary btn-lg">Try V1</a>
+                <a href="/waitlist" class="btn-outline btn-lg">Join the Waitlist</a>
+            </div>
+        </section>
+
+        <section class="landing-features">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                </div>
+                <h3>Write freely</h3>
+                <p>Capture ideas instantly with a clean, focused editor built for speed.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </div>
+                <h3>Find anything</h3>
+                <p>Instant search across all your notes. Never lose a thought again.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <h3>Workflow AI is next</h3>
+                <p>AI Notes is V1. The full AI workflow platform is coming soon.</p>
+            </div>
+        </section>
+
+        <section class="landing-cta">
+            <h2>Ready to start?</h2>
+            <p>Try V1 now or join the waitlist to follow the evolution.</p>
+            <div class="landing-actions">
+                <a href="/app" class="btn-primary btn-lg">Try V1</a>
+                <a href="/waitlist" class="btn-outline btn-lg">Join the Waitlist</a>
+            </div>
+        </section>
+
+        <footer class="landing-footer">
+            <p>&copy; 2026 ZeroTrace. AI Notes V1.</p>
+        </footer>
+
+    </main>
+
+</body>
+</html>

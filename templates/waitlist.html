@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Join the Waitlist - ZeroTrace</title>
+    <meta name="description" content="Join the ZeroTrace waitlist. Follow the evolution from AI Notes to Workflow AI.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/fscss@1.1.25/exec.min.js" defer></script>
+    <link type="text/fscss" href="{{ url_for('static', filename='css/style.fscss') }}">
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">Zero<span>Trace</span></a>
+            <div class="nav-links">
+                <a href="/" class="btn-ghost">Home</a>
+                <a href="/app" class="btn-primary btn-sm">Try V1</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="waitlist-page">
+
+        <section class="waitlist-hero">
+            
+            <h1>Join the <span>Waitlist</span></h1>
+            <p>AI Notes is the first step toward a smarter workflow platform. Get early access to Workflow AI when it launches.</p>
+        </section>
+
+        <section class="waitlist-form-wrapper">
+            <form id="waitlist-form" class="waitlist-form">
+                <div class="form-group">
+                    <label for="wl-name">Your name</label>
+                    <input id="wl-name" type="text" name="name" placeholder="John" autocomplete="given-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="wl-email">Email</label>
+                    <input id="wl-email" type="email" name="email" placeholder="john@example.com" autocomplete="email" required>
+                </div>
+                <button type="submit" class="btn-primary btn-lg btn-full" id="wl-submit">Join Waitlist</button>
+                <p class="waitlist-note">No spam. Just product updates.</p>
+            </form>
+
+            <div id="waitlist-success" class="waitlist-success" style="display:none;">
+                <div class="success-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+                </div>
+                <h2>You're on the list</h2>
+                <p>We'll notify you when Workflow AI launches. In the meantime, try AI Notes V1.</p>
+                <a href="/app" class="btn-primary btn-lg">Try V1</a>
+            </div>
+        </section>
+
+        <footer class="landing-footer">
+            <p>&copy; 2026 ZeroTrace. AI Notes V1.</p>
+        </footer>
+
+    </main>
+
+    <script>
+    (() => {
+        const form = document.getElementById("waitlist-form");
+        const success = document.getElementById("waitlist-success");
+        const submitBtn = document.getElementById("wl-submit");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const name = document.getElementById("wl-name").value.trim();
+            const email = document.getElementById("wl-email").value.trim();
+            if (!name || !email) return;
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Joining...";
+
+            try {
+                const res = await fetch("/api/waitlist", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, email })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    form.style.display = "none";
+                    success.style.display = "block";
+                } else {
+                    alert(data.message || "Something went wrong");
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "Join Waitlist";
+                }
+            } catch {
+                alert("Network error. Please try again.");
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Join Waitlist";
+            }
+        });
+    })();
+    </script>
+
+</body>
+</html>
