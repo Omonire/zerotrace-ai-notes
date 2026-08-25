@@ -24,8 +24,10 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             content TEXT NOT NULL,
+            user_id INTEGER DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
     db.execute("""
@@ -46,7 +48,23 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS ai_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            tokens_used INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
     db.commit()
+
+    # Migrate: add user_id to notes if missing
+    cols = [r[1] for r in db.execute("PRAGMA table_info(notes)").fetchall()]
+    if "user_id" not in cols:
+        db.execute("ALTER TABLE notes ADD COLUMN user_id INTEGER DEFAULT NULL")
+        db.commit()
 
     # Auto-seed default admin
     admin = db.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()

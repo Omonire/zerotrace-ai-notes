@@ -12,17 +12,32 @@
   const noResults = document.getElementById("no-results");
   const notesCount = document.getElementById("notes-count");
   const toastContainer = document.getElementById("toast-container");
+  const aiToolbar = document.getElementById("ai-toolbar");
+  const aiLoading = document.getElementById("ai-loading");
+  const aiResult = document.getElementById("ai-result");
+  const aiResultText = document.getElementById("ai-result-text");
+  const aiApply = document.getElementById("ai-apply");
+  const aiDiscard = document.getElementById("ai-discard");
+  const aiRemaining = document.getElementById("ai-remaining");
 
   let searchTimeout = null;
+  let aiResultContent = "";
 
   function showToast(message, type = "success") {
     const toast = document.createElement("div");
-    toast.className = `toast ${type}`;
+    const colors = type === "error"
+      ? "bg-red-500/90 text-white"
+      : type === "ai"
+        ? "bg-accent/90 text-white"
+        : "bg-green-500/90 text-white";
+    toast.className = `px-4 py-3 rounded-xl text-sm font-medium shadow-lg ${colors} backdrop-blur-sm`;
     toast.textContent = message;
     toastContainer.appendChild(toast);
     setTimeout(() => {
-      toast.classList.add("removing");
-      setTimeout(() => toast.remove(), 200);
+      toast.style.transition = "opacity 0.3s, transform 0.3s";
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(10px)";
+      setTimeout(() => toast.remove(), 300);
     }, 3000);
   }
 
@@ -41,14 +56,14 @@
     notesGrid.innerHTML = "";
     if (notes.length === 0) {
       const hasSearch = searchInput.value.trim().length > 0;
-      emptyState.style.display = hasSearch ? "none" : "block";
-      noResults.style.display = hasSearch ? "block" : "none";
+      emptyState.className = hasSearch ? "hidden" : "text-center py-20";
+      noResults.className = hasSearch ? "text-center py-20" : "hidden";
       notesCount.textContent = "0 notes";
       return;
     }
 
-    emptyState.style.display = "none";
-    noResults.style.display = "none";
+    emptyState.className = "hidden";
+    noResults.className = "hidden";
     notesCount.textContent = `${notes.length} note${notes.length !== 1 ? "s" : ""}`;
 
     notes.forEach((note) => {
@@ -58,21 +73,21 @@
         : formatDate(note.created_at);
 
       const card = document.createElement("article");
-      card.className = "note-card";
+      card.className = "bg-surface border border-border rounded-2xl p-5 hover:border-accent/30 transition-colors group";
       card.dataset.id = note.id;
       card.innerHTML = `
-        <div class="note-card-body">
-          <h3 class="note-card-title">${escapeHtml(note.title)}</h3>
-          <p class="note-card-content">${escapeHtml(note.content)}</p>
+        <div class="mb-4">
+          <h3 class="font-bold mb-2 group-hover:text-accent transition-colors">${escapeHtml(note.title)}</h3>
+          <p class="text-sm text-gray-400 leading-relaxed line-clamp-3">${escapeHtml(note.content)}</p>
         </div>
-        <div class="note-card-footer">
-          <time class="note-date">${dateDisplay}</time>
-          <div class="note-actions">
-            <button class="btn-icon btn-edit" data-id="${note.id}" title="Edit note">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+        <div class="flex items-center justify-between pt-3 border-t border-border">
+          <time class="text-xs text-gray-500">${dateDisplay}</time>
+          <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button class="btn-edit p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors" data-id="${note.id}" title="Edit">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>
             </button>
-            <button class="btn-icon btn-delete" data-id="${note.id}" title="Delete note">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            <button class="btn-delete p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-red-400 transition-colors" data-id="${note.id}" title="Delete">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
             </button>
           </div>
         </div>
@@ -93,6 +108,12 @@
     editorTitle.textContent = "Create a note";
     submitBtn.textContent = "Save Note";
     cancelBtn.style.display = "none";
+    hideAiResult();
+  }
+
+  function hideAiResult() {
+    aiResult.classList.add("hidden");
+    aiResultContent = "";
   }
 
   cancelBtn.addEventListener("click", resetEditor);
@@ -170,6 +191,72 @@
     }
   });
 
+  // ─── AI Actions ────────────────────────────────────────────
+
+  async function fetchAiUsage() {
+    try {
+      const res = await fetch("/api/ai/usage");
+      const data = await res.json();
+      aiRemaining.textContent = `${data.remaining}/10 uses left today`;
+    } catch {
+      aiRemaining.textContent = "";
+    }
+  }
+
+  fetchAiUsage();
+
+  aiToolbar.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".ai-btn");
+    if (!btn) return;
+
+    const action = btn.dataset.action;
+    const content = contentInput.value.trim();
+    if (!content) {
+      showToast("Write something first, then use AI", "error");
+      return;
+    }
+
+    btn.disabled = true;
+    aiLoading.classList.remove("hidden");
+    hideAiResult();
+
+    try {
+      const res = await fetch(`/api/ai/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        aiResultContent = data.result;
+        aiResultText.textContent = data.result;
+        aiResult.classList.remove("hidden");
+        showToast(`AI ${action} complete (${data.tokens_used} tokens)`, "ai");
+        fetchAiUsage();
+      } else {
+        showToast(data.message || "AI failed", "error");
+      }
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      btn.disabled = false;
+      aiLoading.classList.add("hidden");
+    }
+  });
+
+  aiApply.addEventListener("click", () => {
+    contentInput.value = aiResultContent;
+    hideAiResult();
+    showToast("AI result applied");
+  });
+
+  aiDiscard.addEventListener("click", () => {
+    hideAiResult();
+  });
+
+  // ─── Search ────────────────────────────────────────────────
+
   searchInput.addEventListener("input", () => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
@@ -185,6 +272,10 @@
     const url = q ? `/api/notes?search=${encodeURIComponent(q)}` : "/api/notes";
     try {
       const res = await fetch(url);
+      if (res.status === 401) {
+        window.location.href = "/signin";
+        return;
+      }
       const notes = await res.json();
       renderNotes(notes);
     } catch {

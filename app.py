@@ -1,5 +1,6 @@
 import os
 import hashlib
+import json
 from flask import Flask, render_template, request, redirect, jsonify, session
 from database import init_db, get_db
 
@@ -22,14 +23,34 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 
-def search_notes(db, search):
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            return jsonify({"success": False, "message": "Not signed in"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
+def search_notes(db, search, user_id):
     if search:
         return db.execute(
-            "SELECT * FROM notes WHERE title LIKE ? OR content LIKE ? ORDER BY created_at DESC",
-            (f"%{search}%", f"%{search}%")
+            "SELECT * FROM notes WHERE user_id = ? AND (title LIKE ? OR content LIKE ?) ORDER BY created_at DESC",
+            (user_id, f"%{search}%", f"%{search}%")
         ).fetchall()
-    return db.execute("SELECT * FROM notes ORDER BY created_at DESC").fetchall()
+    return db.execute("SELECT * FROM notes WHERE user_id = ? ORDER BY created_at DESC", (user_id,)).fetchall()
 
+
+def get_ai_usage_today(db, user_id):
+    row = db.execute(
+        "SELECT COUNT(*) as count FROM ai_usage WHERE user_id = ? AND DATE(created_at) = DATE('now')",
+        (user_id,)
+    ).fetchone()
+    return row["count"]
+
+
+# ─── Pages ──────────────────────────────────────────────────────
 
 @app.route("/")
 def landing():
@@ -237,21 +258,24 @@ def admin_get_users():
 
 @app.route("/app")
 def home():
+    if "user_id" not in session:
+        return redirect("/signin")
     search = request.args.get("search", "").strip()
     db = get_db()
     try:
-        notes = search_notes(db, search)
+        notes = search_notes(db, search, session["user_id"])
     finally:
         db.close()
-    return render_template("demo_index.html", notes=notes, search=search)
+    return render_template("demo_index.html", notes=notes, search=search, username=session.get("username"))
 
 
 @app.route("/api/notes", methods=["GET"])
+@login_required
 def get_notes():
     search = request.args.get("search", "").strip()
     db = get_db()
     try:
-        notes = search_notes(db, search)
+        notes = search_notes(db, search, session["user_id"])
     finally:
         db.close()
     return jsonify([{
@@ -264,10 +288,11 @@ def get_notes():
 
 
 @app.route("/api/notes/<int:note_id>", methods=["GET"])
+@login_required
 def get_note(note_id):
     db = get_db()
     try:
-        note = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
+        note = db.execute("SELECT * FROM notes WHERE id = ? AND user_id = ?", (note_id, session["user_id"])).fetchone()
         if not note:
             return jsonify({"success": False, "message": "Note not found"}), 404
         return jsonify({
@@ -285,6 +310,7 @@ def get_note(note_id):
 
 
 @app.route("/api/notes", methods=["POST"])
+@login_required
 def create_note():
     data = request.get_json()
     if not data:
@@ -299,7 +325,8 @@ def create_note():
     db = get_db()
     try:
         note_id = db.execute(
-            "INSERT INTO notes (title, content) VALUES (?, ?)", (title, content)
+            "INSERT INTO notes (title, content, user_id) VALUES (?, ?, ?)",
+            (title, content, session["user_id"])
         ).lastrowid
         db.commit()
         note = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
@@ -320,6 +347,7 @@ def create_note():
 
 
 @app.route("/api/notes/<int:note_id>", methods=["PUT"])
+@login_required
 def update_note(note_id):
     data = request.get_json()
     if not data:
@@ -333,13 +361,13 @@ def update_note(note_id):
 
     db = get_db()
     try:
-        existing = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
+        existing = db.execute("SELECT * FROM notes WHERE id = ? AND user_id = ?", (note_id, session["user_id"])).fetchone()
         if not existing:
             return jsonify({"success": False, "message": "Note not found"}), 404
 
         db.execute(
-            "UPDATE notes SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (title, content, note_id)
+            "UPDATE notes SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
+            (title, content, note_id, session["user_id"])
         )
         db.commit()
         note = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
@@ -360,14 +388,15 @@ def update_note(note_id):
 
 
 @app.route("/api/notes/<int:note_id>", methods=["DELETE"])
+@login_required
 def delete_note(note_id):
     db = get_db()
     try:
-        existing = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
+        existing = db.execute("SELECT * FROM notes WHERE id = ? AND user_id = ?", (note_id, session["user_id"])).fetchone()
         if not existing:
             return jsonify({"success": False, "message": "Note not found"}), 404
 
-        db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+        db.execute("DELETE FROM notes WHERE id = ? AND user_id = ?", (note_id, session["user_id"]))
         db.commit()
     finally:
         db.close()
@@ -375,22 +404,109 @@ def delete_note(note_id):
     return jsonify({"success": True, "message": "Note deleted successfully"})
 
 
-@app.route("/notes/save", methods=["POST"])
-def save_note():
-    title = request.form.get("title", "").strip()
-    content = request.form.get("content", "").strip()
+# ─── AI Routes ──────────────────────────────────────────────────
 
-    if not title or not content:
-        return redirect("/app?error=Title+and+content+are+required")
+AI_ACTIONS = {
+    "summarize": "Summarize the following note concisely. Keep the key points and main ideas. Output only the summary, no preamble.",
+    "expand": "Expand the following note with more detail, context, and depth. Keep the original meaning. Output only the expanded text.",
+    "rewrite": "Rewrite the following note to be clearer and more polished. Keep the meaning but improve flow and readability. Output only the rewritten text.",
+}
+
+
+@app.route("/api/ai/<action>", methods=["POST"])
+@login_required
+def ai_action(action):
+    if action not in AI_ACTIONS:
+        return jsonify({"success": False, "message": "Invalid action. Use: summarize, expand, rewrite"}), 400
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "No data received"}), 400
+
+    content = data.get("content", "").strip()
+    if not content:
+        return jsonify({"success": False, "message": "No content to process"}), 400
+
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        return jsonify({"success": False, "message": "AI not configured. Set OPENAI_API_KEY in .env"}), 503
 
     db = get_db()
     try:
-        db.execute("INSERT INTO notes (title, content) VALUES (?, ?)", (title, content))
-        db.commit()
+        usage = get_ai_usage_today(db, session["user_id"])
+        if usage >= 10:
+            return jsonify({"success": False, "message": "Daily AI limit reached (10/day). Try again tomorrow."}), 429
     finally:
         db.close()
 
-    return redirect("/app")
+    try:
+        import urllib.request
+
+        system_prompt = AI_ACTIONS[action]
+        payload = json.dumps({
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": content}
+            ],
+            "max_tokens": 2000,
+            "temperature": 0.7
+        })
+
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=payload.encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+        )
+
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode())
+
+        result_text = result["choices"][0]["message"]["content"].strip()
+        tokens = result.get("usage", {}).get("total_tokens", 0)
+
+        db = get_db()
+        try:
+            db.execute(
+                "INSERT INTO ai_usage (user_id, action, tokens_used) VALUES (?, ?, ?)",
+                (session["user_id"], action, tokens)
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        return jsonify({
+            "success": True,
+            "result": result_text,
+            "action": action,
+            "tokens_used": tokens,
+            "remaining_today": 9 - usage
+        })
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
+        try:
+            error_data = json.loads(error_body)
+            msg = error_data.get("error", {}).get("message", "AI request failed")
+        except Exception:
+            msg = "AI request failed"
+        return jsonify({"success": False, "message": msg}), 502
+    except Exception as e:
+        return jsonify({"success": False, "message": "AI service unavailable"}), 502
+
+
+@app.route("/api/ai/usage", methods=["GET"])
+@login_required
+def ai_usage():
+    db = get_db()
+    try:
+        usage = get_ai_usage_today(db, session["user_id"])
+    finally:
+        db.close()
+    return jsonify({"used": usage, "limit": 10, "remaining": 10 - usage})
 
 
 if __name__ == "__main__":

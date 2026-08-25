@@ -11,79 +11,118 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
+<body class="bg-bg text-gray-100 font-sans min-h-screen">
 
-    <nav class="navbar">
-        <div class="nav-inner">
-            <a href="/" class="nav-logo">Zero<span>Trace</span></a>
-            <div class="nav-links">
-                <span class="nav-badge">AI Notes - V1</span>
-                <a href="/" class="btn-ghost">Home</a>
-                <a href="/logout" class="btn-ghost">Sign Out</a>
+    <nav class="sticky top-0 z-50 backdrop-blur-xl bg-bg/80 border-b border-border">
+        <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="/" class="text-xl font-extrabold tracking-tight">Zero<span class="text-accent">Trace</span></a>
+            <div class="flex items-center gap-4">
+                <span class="text-sm text-gray-400 hidden sm:inline">{{ username }}</span>
+                <a href="/" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Home</a>
+                <a href="/logout" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Sign Out</a>
             </div>
         </div>
     </nav>
 
-    <main class="app">
+    <main class="max-w-6xl mx-auto px-6 py-10">
 
-        <section class="hero">
-            <h1>Your thoughts.<br><span>Smarter.</span></h1>
-            <p>Capture your ideas, organize your thoughts, and eventually let AI help you understand them.</p>
-        </section>
-
-        <section class="editor" id="editor">
-            <div class="editor-header">
-                <h2 id="editor-title">Create a note</h2>
-                <button type="button" class="btn-ghost" id="editor-cancel" style="display:none;">Cancel</button>
+        <!-- Editor -->
+        <section class="bg-surface border border-border rounded-2xl p-6 mb-10">
+            <div class="flex items-center justify-between mb-5">
+                <h2 id="editor-title" class="text-lg font-bold">Create a note</h2>
+                <button type="button" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5" id="editor-cancel" style="display:none;">Cancel</button>
             </div>
             <form id="note-form">
                 <input type="hidden" id="edit-note-id" value="">
-                <div class="form-group">
-                    <input id="note-title" type="text" placeholder="Note title" autocomplete="off" required>
+                <div class="mb-4">
+                    <input id="note-title" type="text" placeholder="Note title" autocomplete="off" required
+                        class="w-full bg-bg border border-border rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors">
                 </div>
-                <div class="form-group">
-                    <textarea id="note-content" placeholder="Start writing..." rows="5" required></textarea>
+                <div class="mb-4">
+                    <textarea id="note-content" placeholder="Start writing..." rows="5" required
+                        class="w-full bg-bg border border-border rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors resize-none"></textarea>
                 </div>
-                <div class="form-actions">
-                    <button type="submit" class="btn-primary" id="submit-btn">Save Note</button>
+
+                <!-- AI Toolbar -->
+                <div class="flex items-center gap-2 mb-4 flex-wrap" id="ai-toolbar">
+                    <span class="text-xs text-gray-500 mr-1">AI:</span>
+                    <button type="button" class="ai-btn" data-action="summarize" title="Summarize note">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/></svg>
+                        Summarize
+                    </button>
+                    <button type="button" class="ai-btn" data-action="expand" title="Expand note">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/></svg>
+                        Expand
+                    </button>
+                    <button type="button" class="ai-btn" data-action="rewrite" title="Rewrite note">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182"/></svg>
+                        Rewrite
+                    </button>
+                    <span class="text-xs text-gray-600 ml-auto" id="ai-remaining"></span>
+                </div>
+
+                <!-- AI Loading -->
+                <div id="ai-loading" class="hidden mb-4 bg-accent/5 border border-accent/20 rounded-xl px-4 py-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+                        <span class="text-sm text-accent">AI is thinking...</span>
+                    </div>
+                </div>
+
+                <!-- AI Result Preview -->
+                <div id="ai-result" class="hidden mb-4 bg-bg border border-accent/30 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-xs font-semibold text-accent uppercase tracking-wider">AI Result</span>
+                        <div class="flex gap-2">
+                            <button type="button" id="ai-apply" class="text-xs bg-accent hover:bg-accent/90 text-white px-3 py-1 rounded-lg transition-colors">Apply</button>
+                            <button type="button" id="ai-discard" class="text-xs text-gray-400 hover:text-white px-3 py-1 rounded-lg hover:bg-white/5 transition-colors">Discard</button>
+                        </div>
+                    </div>
+                    <div id="ai-result-text" class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap"></div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <button type="submit" class="bg-accent hover:bg-accent/90 text-white font-semibold text-sm px-6 py-2.5 rounded-xl transition-all hover:scale-[1.02]" id="submit-btn">Save Note</button>
                 </div>
             </form>
         </section>
 
-        <section class="notes-section">
-            <div class="notes-toolbar">
-                <div class="notes-info">
-                    <h2>Your Notes</h2>
-                    <span class="notes-count" id="notes-count">{{ notes|length }} note{{ 's' if notes|length != 1 else '' }}</span>
+        <!-- Notes -->
+        <section>
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-lg font-bold">Your Notes</h2>
+                    <span class="text-sm text-gray-500" id="notes-count">{{ notes|length }} note{{ 's' if notes|length != 1 else '' }}</span>
                 </div>
-                <div class="search-box">
-                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                    <input type="text" id="search-input" placeholder="Search notes..." value="{{ search }}">
+                <div class="relative">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="text" id="search-input" placeholder="Search notes..." value="{{ search }}"
+                        class="bg-surface border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors w-64">
                 </div>
             </div>
 
-            <div class="notes-grid" id="notes-grid">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" id="notes-grid">
                 {% if notes %}
                     {% for note in notes %}
-                        <article class="note-card" data-id="{{ note['id'] }}">
-                            <div class="note-card-body">
-                                <h3 class="note-card-title">{{ note['title'] }}</h3>
-                                <p class="note-card-content">{{ note['content'] }}</p>
+                        <article class="bg-surface border border-border rounded-2xl p-5 hover:border-accent/30 transition-colors group" data-id="{{ note['id'] }}">
+                            <div class="mb-4">
+                                <h3 class="font-bold mb-2 group-hover:text-accent transition-colors">{{ note['title'] }}</h3>
+                                <p class="text-sm text-gray-400 leading-relaxed line-clamp-3">{{ note['content'] }}</p>
                             </div>
-                            <div class="note-card-footer">
-                                <time class="note-date" datetime="{{ note['created_at'] }}">
+                            <div class="flex items-center justify-between pt-3 border-t border-border">
+                                <time class="text-xs text-gray-500" datetime="{{ note['created_at'] }}">
                                     {% if note['updated_at'] != note['created_at'] %}
                                         Updated {{ note['updated_at'] }}
                                     {% else %}
                                         {{ note['created_at'] }}
                                     {% endif %}
                                 </time>
-                                <div class="note-actions">
-                                    <button class="btn-icon btn-edit" data-id="{{ note['id'] }}" title="Edit note">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button class="btn-edit p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors" data-id="{{ note['id'] }}" title="Edit">
+                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>
                                     </button>
-                                    <button class="btn-icon btn-delete" data-id="{{ note['id'] }}" title="Delete note">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                    <button class="btn-delete p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-red-400 transition-colors" data-id="{{ note['id'] }}" title="Delete">
+                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
                                     </button>
                                 </div>
                             </div>
@@ -92,22 +131,24 @@
                 {% endif %}
             </div>
 
-            <div class="empty-state" id="empty-state" style="display: {{ 'none' if notes else 'block' }}">
-                <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
-                <h3>No notes yet</h3>
-                <p>Create your first note above to get started.</p>
+            <!-- Empty State -->
+            <div id="empty-state" class="text-center py-20 {{ 'hidden' if notes else '' }}">
+                <svg class="w-12 h-12 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+                <h3 class="font-bold text-gray-300 mb-1">No notes yet</h3>
+                <p class="text-sm text-gray-500">Create your first note above to get started.</p>
             </div>
 
-            <div class="no-results" id="no-results" style="display: none;">
-                <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <h3>No results found</h3>
-                <p>Try a different search term.</p>
+            <!-- No Results -->
+            <div id="no-results" class="text-center py-20 hidden">
+                <svg class="w-12 h-12 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <h3 class="font-bold text-gray-300 mb-1">No results found</h3>
+                <p class="text-sm text-gray-500">Try a different search term.</p>
             </div>
         </section>
 
     </main>
 
-    <div class="toast-container" id="toast-container"></div>
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2"></div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
