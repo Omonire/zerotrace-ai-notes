@@ -9,67 +9,175 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    bg: '#0a0b0f',
+                    surface: '#12141c',
+                    border: '#1f2333',
+                    accent: '#7c5cff',
+                },
+                fontFamily: {
+                    sans: ['Inter', 'sans-serif'],
+                }
+            }
+        }
+    }
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body class="bg-bg text-gray-100 font-sans">
 
-    <nav class="navbar">
-        <div class="nav-inner">
-            <a href="/" class="nav-logo">Zero<span>Trace</span></a>
-            <div class="nav-links">
-                <a href="/signin" class="btn-ghost">Sign In</a>
-                <a href="/signup" class="btn-primary btn-sm">Sign Up</a>
+    <nav class="sticky top-0 z-50 backdrop-blur-xl bg-bg/80 border-b border-border">
+        <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="/" class="text-xl font-extrabold tracking-tight">Zero<span class="text-accent">Trace</span></a>
+            <div class="flex items-center gap-3">
+                <a href="/signin" class="text-sm text-gray-400 hover:text-white transition-colors px-4 py-2 rounded-lg hover:bg-white/5">Sign In</a>
+                <a href="/signup" class="text-sm font-semibold bg-accent hover:bg-accent/90 text-white px-5 py-2 rounded-lg transition-all hover:scale-[1.02]">Get Started</a>
             </div>
         </div>
     </nav>
 
-    <main class="landing">
+    <main>
 
-        <section class="landing-hero">
-            <div class="landing-hero-badge">AI Notes V1 is live</div>
-            <h1>Capture your thoughts.<br><span>Build smarter workflows.</span></h1>
-            <p class="landing-subtitle">AI Notes is the first step toward a smarter workflow platform. Write, organize, and manage your notes. AI-powered features coming next.</p>
-            <div class="landing-actions">
-                <a href="/app" class="btn-primary btn-lg">Try V1</a>
-                <a href="/waitlist" class="btn-outline btn-lg">Join the Waitlist</a>
+        <!-- Hero -->
+        <section class="relative overflow-hidden">
+            <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(124,92,255,0.12)_0%,_transparent_60%)]"></div>
+            <div class="relative max-w-6xl mx-auto px-6 pt-24 pb-20 text-center">
+                <div class="inline-flex items-center gap-2 bg-accent/10 border border-accent/20 text-accent text-xs font-semibold px-4 py-1.5 rounded-full mb-8">
+                    <span class="w-1.5 h-1.5 bg-accent rounded-full animate-pulse"></span>
+                    V1 is live
+                </div>
+                <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.05] mb-6">
+                    Capture your thoughts.<br>
+                    <span class="text-accent">Build smarter workflows.</span>
+                </h1>
+                <p class="text-gray-400 text-lg md:text-xl max-w-xl mx-auto mb-10 leading-relaxed">
+                    The first step toward a smarter workflow platform. Write, organize, and manage your notes. AI features coming next.
+                </p>
+                <div class="flex items-center justify-center gap-4">
+                    <a href="/app" class="bg-accent hover:bg-accent/90 text-white font-semibold text-base px-7 py-3.5 rounded-xl transition-all hover:scale-[1.02] shadow-lg shadow-accent/25">
+                        Try V1 Free
+                    </a>
+                    <a href="/waitlist" class="border border-border hover:border-accent/40 hover:bg-accent/5 text-white font-semibold text-base px-7 py-3.5 rounded-xl transition-all">
+                        Join Waitlist
+                    </a>
+                </div>
+                <p class="text-gray-500 text-xs mt-5">No credit card required. Free forever.</p>
             </div>
         </section>
 
-        <section class="landing-features">
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        <!-- App Preview -->
+        <section class="max-w-5xl mx-auto px-6 -mt-4 mb-24">
+            <div class="rounded-2xl border border-border bg-surface p-1 shadow-2xl shadow-black/50">
+                <div class="rounded-xl bg-bg overflow-hidden">
+                    <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+                        <span class="w-3 h-3 rounded-full bg-red-500/70"></span>
+                        <span class="w-3 h-3 rounded-full bg-yellow-500/70"></span>
+                        <span class="w-3 h-3 rounded-full bg-green-500/70"></span>
+                        <span class="ml-3 text-xs text-gray-500 font-mono">zerotrace.app/app</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 p-6">
+                        <div class="col-span-1 space-y-3">
+                            <div class="h-8 bg-surface rounded-lg w-full"></div>
+                            <div class="h-8 bg-surface rounded-lg w-3/4"></div>
+                            <div class="h-8 bg-surface rounded-lg w-5/6"></div>
+                        </div>
+                        <div class="col-span-2 space-y-3">
+                            <div class="h-4 bg-surface rounded w-1/3"></div>
+                            <div class="h-20 bg-surface rounded-lg"></div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="h-16 bg-surface rounded-lg"></div>
+                                <div class="h-16 bg-surface rounded-lg"></div>
+                                <div class="h-16 bg-surface rounded-lg"></div>
+                                <div class="h-16 bg-surface rounded-lg"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <h3>Write freely</h3>
-                <p>Capture ideas instantly with a clean, focused editor built for speed.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                </div>
-                <h3>Find anything</h3>
-                <p>Instant search across all your notes. Never lose a thought again.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                </div>
-                <h3>Workflow AI is next</h3>
-                <p>AI Notes is V1. The full AI workflow platform is coming soon.</p>
             </div>
         </section>
 
-        <section class="landing-cta">
-            <h2>Ready to start?</h2>
-            <p>Try V1 now or join the waitlist to follow the evolution.</p>
-            <div class="landing-actions">
-                <a href="/app" class="btn-primary btn-lg">Try V1</a>
-                <a href="/waitlist" class="btn-outline btn-lg">Join the Waitlist</a>
+        <!-- Features -->
+        <section class="max-w-6xl mx-auto px-6 pb-24">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight mb-4">Everything you need</h2>
+                <p class="text-gray-400 text-lg max-w-md mx-auto">Simple, powerful, and built for developers who move fast.</p>
+            </div>
+            <div class="grid md:grid-cols-3 gap-5">
+                <div class="bg-surface border border-border rounded-2xl p-7 hover:border-accent/30 transition-colors group">
+                    <div class="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-5 group-hover:bg-accent/15 transition-colors">
+                        <svg class="w-6 h-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">Write freely</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Clean, focused editor built for speed. Capture ideas the moment they hit.</p>
+                </div>
+                <div class="bg-surface border border-border rounded-2xl p-7 hover:border-accent/30 transition-colors group">
+                    <div class="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-5 group-hover:bg-accent/15 transition-colors">
+                        <svg class="w-6 h-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">Instant search</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">Find anything across all your notes in milliseconds. Never lose a thought.</p>
+                </div>
+                <div class="bg-surface border border-border rounded-2xl p-7 hover:border-accent/30 transition-colors group">
+                    <div class="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-5 group-hover:bg-accent/15 transition-colors">
+                        <svg class="w-6 h-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">AI is next</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">V1 is just the beginning. The full AI workflow platform is coming soon.</p>
+                </div>
             </div>
         </section>
 
-        <footer class="landing-footer">
-            <p>&copy; 2026 ZeroTrace. AI Notes V1.</p>
+        <!-- Stats -->
+        <section class="border-y border-border">
+            <div class="max-w-6xl mx-auto px-6 py-16 grid grid-cols-3 gap-8 text-center">
+                <div>
+                    <div class="text-3xl md:text-4xl font-extrabold text-accent">V1</div>
+                    <div class="text-gray-400 text-sm mt-1">Current version</div>
+                </div>
+                <div>
+                    <div class="text-3xl md:text-4xl font-extrabold">100%</div>
+                    <div class="text-gray-400 text-sm mt-1">Free forever</div>
+                </div>
+                <div>
+                    <div class="text-3xl md:text-4xl font-extrabold text-accent">0</div>
+                    <div class="text-gray-400 text-sm mt-1">Ads, ever</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CTA -->
+        <section class="max-w-3xl mx-auto px-6 py-24 text-center">
+            <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight mb-4">Ready to start?</h2>
+            <p class="text-gray-400 text-lg mb-8">Try V1 now or join the waitlist to follow the evolution.</p>
+            <div class="flex items-center justify-center gap-4">
+                <a href="/app" class="bg-accent hover:bg-accent/90 text-white font-semibold text-base px-7 py-3.5 rounded-xl transition-all hover:scale-[1.02] shadow-lg shadow-accent/25">
+                    Try V1 Free
+                </a>
+                <a href="/waitlist" class="border border-border hover:border-accent/40 hover:bg-accent/5 text-white font-semibold text-base px-7 py-3.5 rounded-xl transition-all">
+                    Join Waitlist
+                </a>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="border-t border-border">
+            <div class="max-w-6xl mx-auto px-6 py-8 flex items-center justify-between">
+                <div class="text-sm text-gray-500">&copy; 2026 ZeroTrace. All rights reserved.</div>
+                <div class="flex items-center gap-6">
+                    <a href="#" class="text-gray-500 hover:text-white transition-colors text-sm">Twitter</a>
+                    <a href="#" class="text-gray-500 hover:text-white transition-colors text-sm">GitHub</a>
+                </div>
+            </div>
         </footer>
 
     </main>
