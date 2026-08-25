@@ -58,12 +58,37 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            color TEXT DEFAULT '#7c5cff',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(name, user_id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS note_tags (
+            note_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            PRIMARY KEY (note_id, tag_id),
+            FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        )
+    """)
     db.commit()
 
     # Migrate: add user_id to notes if missing
     cols = [r[1] for r in db.execute("PRAGMA table_info(notes)").fetchall()]
     if "user_id" not in cols:
         db.execute("ALTER TABLE notes ADD COLUMN user_id INTEGER DEFAULT NULL")
+        db.commit()
+
+    # Migrate: add content_format to notes if missing
+    if "content_format" not in cols:
+        db.execute("ALTER TABLE notes ADD COLUMN content_format TEXT DEFAULT 'plain'")
         db.commit()
 
     # Auto-seed default admin

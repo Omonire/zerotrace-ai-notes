@@ -42,6 +42,15 @@ def search_notes(db, search, user_id):
     return db.execute("SELECT * FROM notes WHERE user_id = ? ORDER BY created_at DESC", (user_id,)).fetchall()
 
 
+def get_note_tags(db, note_id):
+    tags = db.execute("""
+        SELECT t.id, t.name, t.color FROM tags t
+        JOIN note_tags nt ON t.id = nt.tag_id
+        WHERE nt.note_id = ?
+    """, (note_id,)).fetchall()
+    return [{"id": t["id"], "name": t["name"], "color": t["color"]} for t in tags]
+
+
 def get_ai_usage_today(db, user_id):
     row = db.execute(
         "SELECT COUNT(*) as count FROM ai_usage WHERE user_id = ? AND DATE(created_at) = DATE('now')",
@@ -282,6 +291,8 @@ def get_notes():
         "id": row["id"],
         "title": row["title"],
         "content": row["content"],
+        "content_format": row["content_format"],
+        "tags": get_note_tags(db, row["id"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"]
     } for row in notes])
@@ -301,6 +312,8 @@ def get_note(note_id):
                 "id": note["id"],
                 "title": note["title"],
                 "content": note["content"],
+                "content_format": note["content_format"],
+                "tags": get_note_tags(db, note["id"]),
                 "created_at": note["created_at"],
                 "updated_at": note["updated_at"]
             }
@@ -318,6 +331,8 @@ def create_note():
 
     title = data.get("title", "").strip()
     content = data.get("content", "").strip()
+    content_format = data.get("content_format", "plain")
+    tag_ids = data.get("tag_ids", [])
 
     if not title or not content:
         return jsonify({"success": False, "message": "Title and content are required"}), 400
@@ -325,9 +340,13 @@ def create_note():
     db = get_db()
     try:
         note_id = db.execute(
-            "INSERT INTO notes (title, content, user_id) VALUES (?, ?, ?)",
-            (title, content, session["user_id"])
+            "INSERT INTO notes (title, content, content_format, user_id) VALUES (?, ?, ?, ?)",
+            (title, content, content_format, session["user_id"])
         ).lastrowid
+        for tag_id in tag_ids:
+            tag = db.execute("SELECT id FROM tags WHERE id = ? AND user_id = ?", (tag_id, session["user_id"])).fetchone()
+            if tag:
+                db.execute("INSERT OR IGNORE INTO note_tags (note_id, tag_id) VALUES (?, ?)", (note_id, tag_id))
         db.commit()
         note = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
     finally:
@@ -340,6 +359,7 @@ def create_note():
             "id": note["id"],
             "title": note["title"],
             "content": note["content"],
+            "content_format": note["content_format"],
             "created_at": note["created_at"],
             "updated_at": note["updated_at"]
         }
@@ -355,6 +375,8 @@ def update_note(note_id):
 
     title = data.get("title", "").strip()
     content = data.get("content", "").strip()
+    content_format = data.get("content_format", "plain")
+    tag_ids = data.get("tag_ids", None)
 
     if not title or not content:
         return jsonify({"success": False, "message": "Title and content are required"}), 400
@@ -366,9 +388,15 @@ def update_note(note_id):
             return jsonify({"success": False, "message": "Note not found"}), 404
 
         db.execute(
-            "UPDATE notes SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
-            (title, content, note_id, session["user_id"])
+            "UPDATE notes SET title = ?, content = ?, content_format = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
+            (title, content, content_format, note_id, session["user_id"])
         )
+        if tag_ids is not None:
+            db.execute("DELETE FROM note_tags WHERE note_id = ?", (note_id,))
+            for tag_id in tag_ids:
+                tag = db.execute("SELECT id FROM tags WHERE id = ? AND user_id = ?", (tag_id, session["user_id"])).fetchone()
+                if tag:
+                    db.execute("INSERT OR IGNORE INTO note_tags (note_id, tag_id) VALUES (?, ?)", (note_id, tag_id))
         db.commit()
         note = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
     finally:
@@ -381,6 +409,7 @@ def update_note(note_id):
             "id": note["id"],
             "title": note["title"],
             "content": note["content"],
+            "content_format": note["content_format"],
             "created_at": note["created_at"],
             "updated_at": note["updated_at"]
         }
@@ -507,6 +536,222 @@ def ai_usage():
     finally:
         db.close()
     return jsonify({"used": usage, "limit": 10, "remaining": 10 - usage})
+
+
+# ─── Tags Routes ───────────────────────────────────────────────
+
+@app.route("/api/tags", methods=["GET"])
+@login_required
+def get_tags():
+    db = get_db()
+    try:
+        tags = db.execute("SELECT * FROM tags WHERE user_id = ? ORDER BY name", (session["user_id"],)).fetchall()
+    finally:
+        db.close()
+    return jsonify([{"id": t["id"], "name": t["name"], "color": t["color"]} for t in tags])
+
+
+@app.route("/api/tags", methods=["POST"])
+@login_required
+def create_tag():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "No data received"}), 400
+
+    name = data.get("name", "").strip()
+    color = data.get("color", "#7c5cff").strip()
+
+    if not name:
+        return jsonify({"success": False, "message": "Tag name is required"}), 400
+
+    db = get_db()
+    try:
+        existing = db.execute("SELECT id FROM tags WHERE name = ? AND user_id = ?", (name, session["user_id"])).fetchone()
+        if existing:
+            return jsonify({"success": False, "message": "Tag already exists"}), 409
+
+        tag_id = db.execute("INSERT INTO tags (name, color, user_id) VALUES (?, ?, ?)", (name, color, session["user_id"])).lastrowid
+        db.commit()
+    finally:
+        db.close()
+
+    return jsonify({"success": True, "tag": {"id": tag_id, "name": name, "color": color}}), 201
+
+
+@app.route("/api/tags/<int:tag_id>", methods=["DELETE"])
+@login_required
+def delete_tag(tag_id):
+    db = get_db()
+    try:
+        tag = db.execute("SELECT id FROM tags WHERE id = ? AND user_id = ?", (tag_id, session["user_id"])).fetchone()
+        if not tag:
+            return jsonify({"success": False, "message": "Tag not found"}), 404
+        db.execute("DELETE FROM note_tags WHERE tag_id = ?", (tag_id,))
+        db.execute("DELETE FROM tags WHERE id = ? AND user_id = ?", (tag_id, session["user_id"]))
+        db.commit()
+    finally:
+        db.close()
+    return jsonify({"success": True, "message": "Tag deleted"})
+
+
+# ─── Export/Import Routes ──────────────────────────────────────
+
+@app.route("/api/notes/export", methods=["GET"])
+@login_required
+def export_notes():
+    db = get_db()
+    try:
+        notes = db.execute("SELECT * FROM notes WHERE user_id = ? ORDER BY created_at DESC", (session["user_id"],)).fetchall()
+        export = []
+        for note in notes:
+            tags = get_note_tags(db, note["id"])
+            export.append({
+                "title": note["title"],
+                "content": note["content"],
+                "content_format": note["content_format"],
+                "tags": [t["name"] for t in tags],
+                "created_at": note["created_at"],
+                "updated_at": note["updated_at"]
+            })
+    finally:
+        db.close()
+
+    return jsonify({
+        "version": "1.0",
+        "exported_at": __import__("datetime").datetime.utcnow().isoformat(),
+        "notes_count": len(export),
+        "notes": export
+    })
+
+
+@app.route("/api/notes/import", methods=["POST"])
+@login_required
+def import_notes():
+    data = request.get_json()
+    if not data or "notes" not in data:
+        return jsonify({"success": False, "message": "Invalid import data"}), 400
+
+    notes = data["notes"]
+    if not isinstance(notes, list):
+        return jsonify({"success": False, "message": "Notes must be a list"}), 400
+
+    imported = 0
+    db = get_db()
+    try:
+        for item in notes:
+            title = item.get("title", "").strip()
+            content = item.get("content", "").strip()
+            content_format = item.get("content_format", "plain")
+            tag_names = item.get("tags", [])
+
+            if not title or not content:
+                continue
+
+            note_id = db.execute(
+                "INSERT INTO notes (title, content, content_format, user_id) VALUES (?, ?, ?, ?)",
+                (title, content, content_format, session["user_id"])
+            ).lastrowid
+
+            for tag_name in tag_names:
+                tag_name = tag_name.strip()
+                if not tag_name:
+                    continue
+                tag = db.execute("SELECT id FROM tags WHERE name = ? AND user_id = ?", (tag_name, session["user_id"])).fetchone()
+                if not tag:
+                    tag_id = db.execute("INSERT INTO tags (name, user_id) VALUES (?, ?)", (tag_name, session["user_id"])).lastrowid
+                else:
+                    tag_id = tag["id"]
+                db.execute("INSERT OR IGNORE INTO note_tags (note_id, tag_id) VALUES (?, ?)", (note_id, tag_id))
+
+            imported += 1
+        db.commit()
+    finally:
+        db.close()
+
+    return jsonify({"success": True, "message": f"Imported {imported} notes", "imported": imported})
+
+
+# ─── User Settings Routes ──────────────────────────────────────
+
+@app.route("/settings")
+def settings_page():
+    if "user_id" not in session:
+        return redirect("/signin")
+    return render_template("settings.html", username=session.get("username"))
+
+
+@app.route("/api/settings/username", methods=["PUT"])
+@login_required
+def update_username():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "No data received"}), 400
+
+    new_username = data.get("username", "").strip()
+    if not new_username or len(new_username) < 3:
+        return jsonify({"success": False, "message": "Username must be at least 3 characters"}), 400
+
+    db = get_db()
+    try:
+        existing = db.execute("SELECT id FROM users WHERE username = ? AND id != ?", (new_username, session["user_id"])).fetchone()
+        if existing:
+            return jsonify({"success": False, "message": "Username already taken"}), 409
+        db.execute("UPDATE users SET username = ? WHERE id = ?", (new_username, session["user_id"]))
+        db.commit()
+        session["username"] = new_username
+    finally:
+        db.close()
+
+    return jsonify({"success": True, "message": "Username updated"})
+
+
+@app.route("/api/settings/password", methods=["PUT"])
+@login_required
+def update_password():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "No data received"}), 400
+
+    current = data.get("current_password", "").strip()
+    new_password = data.get("new_password", "").strip()
+
+    if not current or not new_password:
+        return jsonify({"success": False, "message": "Both fields are required"}), 400
+
+    if len(new_password) < 6:
+        return jsonify({"success": False, "message": "New password must be at least 6 characters"}), 400
+
+    db = get_db()
+    try:
+        user = db.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+        if not user or user["password"] != hash_password(current):
+            return jsonify({"success": False, "message": "Current password is incorrect"}), 401
+        db.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(new_password), session["user_id"]))
+        db.commit()
+    finally:
+        db.close()
+
+    return jsonify({"success": True, "message": "Password updated"})
+
+
+@app.route("/api/settings/stats", methods=["GET"])
+@login_required
+def user_stats():
+    db = get_db()
+    try:
+        notes_count = db.execute("SELECT COUNT(*) as c FROM notes WHERE user_id = ?", (session["user_id"],)).fetchone()["c"]
+        tags_count = db.execute("SELECT COUNT(*) as c FROM tags WHERE user_id = ?", (session["user_id"],)).fetchone()["c"]
+        ai_today = get_ai_usage_today(db, session["user_id"])
+        ai_total = db.execute("SELECT COALESCE(SUM(tokens_used), 0) as t FROM ai_usage WHERE user_id = ?", (session["user_id"],)).fetchone()["t"]
+    finally:
+        db.close()
+
+    return jsonify({
+        "notes_count": notes_count,
+        "tags_count": tags_count,
+        "ai_today": ai_today,
+        "ai_total_tokens": ai_total
+    })
 
 
 if __name__ == "__main__":

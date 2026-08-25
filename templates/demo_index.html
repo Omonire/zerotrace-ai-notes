@@ -10,14 +10,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 </head>
 <body class="bg-bg text-gray-100 font-sans min-h-screen">
 
     <nav class="sticky top-0 z-50 backdrop-blur-xl bg-bg/80 border-b border-border">
         <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
             <a href="/" class="text-xl font-extrabold tracking-tight">Zero<span class="text-accent">Trace</span></a>
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3">
                 <span class="text-sm text-gray-400 hidden sm:inline">{{ username }}</span>
+                <a href="/settings" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Settings</a>
                 <a href="/" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Home</a>
                 <a href="/logout" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Sign Out</a>
             </div>
@@ -38,23 +41,44 @@
                     <input id="note-title" type="text" placeholder="Note title" autocomplete="off" required
                         class="w-full bg-bg border border-border rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors">
                 </div>
-                <div class="mb-4">
-                    <textarea id="note-content" placeholder="Start writing..." rows="5" required
-                        class="w-full bg-bg border border-border rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors resize-none"></textarea>
+
+                <!-- Tags Selector -->
+                <div class="mb-4 flex items-center gap-2 flex-wrap">
+                    <span class="text-xs text-gray-500">Tags:</span>
+                    <div id="selected-tags" class="flex gap-1.5 flex-wrap"></div>
+                    <div class="relative">
+                        <button type="button" id="add-tag-btn" class="text-xs text-gray-500 hover:text-accent border border-border hover:border-accent/40 rounded-lg px-2 py-1 transition-colors">+ Tag</button>
+                        <div id="tag-dropdown" class="hidden absolute top-full left-0 mt-1 bg-surface border border-border rounded-xl shadow-xl z-20 w-56 max-h-60 overflow-y-auto">
+                            <div id="tag-list" class="p-2"></div>
+                            <div class="border-t border-border p-2">
+                                <div class="flex gap-1.5">
+                                    <input id="new-tag-name" type="text" placeholder="New tag" class="flex-1 bg-bg border border-border rounded-lg px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50">
+                                    <input id="new-tag-color" type="color" value="#7c5cff" class="w-7 h-7 rounded-lg cursor-pointer border-0 bg-transparent">
+                                    <button type="button" id="create-tag-btn" class="bg-accent hover:bg-accent/90 text-white text-xs px-2 py-1 rounded-lg transition-colors">Add</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Rich Text Editor -->
+                <div class="mb-4">
+                    <div id="editor-container" class="bg-bg border border-border rounded-xl overflow-hidden"></div>
+                </div>
+                <textarea id="note-content" class="hidden"></textarea>
 
                 <!-- AI Toolbar -->
                 <div class="flex items-center gap-2 mb-4 flex-wrap" id="ai-toolbar">
                     <span class="text-xs text-gray-500 mr-1">AI:</span>
-                    <button type="button" class="ai-btn" data-action="summarize" title="Summarize note">
+                    <button type="button" class="ai-btn" data-action="summarize">
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/></svg>
                         Summarize
                     </button>
-                    <button type="button" class="ai-btn" data-action="expand" title="Expand note">
+                    <button type="button" class="ai-btn" data-action="expand">
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/></svg>
                         Expand
                     </button>
-                    <button type="button" class="ai-btn" data-action="rewrite" title="Rewrite note">
+                    <button type="button" class="ai-btn" data-action="rewrite">
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182"/></svg>
                         Rewrite
                     </button>
@@ -83,6 +107,7 @@
 
                 <div class="flex items-center justify-between">
                     <button type="submit" class="bg-accent hover:bg-accent/90 text-white font-semibold text-sm px-6 py-2.5 rounded-xl transition-all hover:scale-[1.02]" id="submit-btn">Save Note</button>
+                    <span class="text-xs text-gray-600 hidden sm:inline">Ctrl+S to save</span>
                 </div>
             </form>
         </section>
@@ -94,10 +119,16 @@
                     <h2 class="text-lg font-bold">Your Notes</h2>
                     <span class="text-sm text-gray-500" id="notes-count">{{ notes|length }} note{{ 's' if notes|length != 1 else '' }}</span>
                 </div>
-                <div class="relative">
-                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                    <input type="text" id="search-input" placeholder="Search notes..." value="{{ search }}"
-                        class="bg-surface border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors w-64">
+                <div class="flex items-center gap-3">
+                    <!-- Filter by tag -->
+                    <select id="filter-tag" class="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-accent/50 transition-colors">
+                        <option value="">All tags</option>
+                    </select>
+                    <div class="relative">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <input type="text" id="search-input" placeholder="Search notes..." value="{{ search }}"
+                            class="bg-surface border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors w-56">
+                    </div>
                 </div>
             </div>
 
@@ -107,7 +138,7 @@
                         <article class="bg-surface border border-border rounded-2xl p-5 hover:border-accent/30 transition-colors group" data-id="{{ note['id'] }}">
                             <div class="mb-4">
                                 <h3 class="font-bold mb-2 group-hover:text-accent transition-colors">{{ note['title'] }}</h3>
-                                <p class="text-sm text-gray-400 leading-relaxed line-clamp-3">{{ note['content'] }}</p>
+                                <div class="text-sm text-gray-400 leading-relaxed line-clamp-3">{{ note['content'] }}</div>
                             </div>
                             <div class="flex items-center justify-between pt-3 border-t border-border">
                                 <time class="text-xs text-gray-500" datetime="{{ note['created_at'] }}">
@@ -147,6 +178,25 @@
         </section>
 
     </main>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-surface border border-border rounded-2xl p-6 w-full max-w-md">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="font-bold">Keyboard Shortcuts</h3>
+                <button id="close-shortcuts" class="text-gray-400 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="space-y-3 text-sm">
+                <div class="flex justify-between"><span class="text-gray-400">New note</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Ctrl+N</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Save note</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Ctrl+S</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Search</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Ctrl+K</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Cancel / Close</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Escape</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Show shortcuts</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Ctrl+/</kbd></div>
+            </div>
+        </div>
+    </div>
 
     <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2"></div>
 

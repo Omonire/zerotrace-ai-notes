@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Settings - ZeroTrace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-bg text-gray-100 font-sans min-h-screen">
+
+    <nav class="sticky top-0 z-50 backdrop-blur-xl bg-bg/80 border-b border-border">
+        <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="/" class="text-xl font-extrabold tracking-tight">Zero<span class="text-accent">Trace</span></a>
+            <div class="flex items-center gap-4">
+                <a href="/app" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Notes</a>
+                <a href="/logout" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Sign Out</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-2xl mx-auto px-6 py-10">
+        <h1 class="text-2xl font-extrabold mb-8">Settings</h1>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10" id="stats-grid">
+            <div class="bg-surface border border-border rounded-xl p-4 text-center">
+                <div class="text-2xl font-extrabold text-accent" id="stat-notes">-</div>
+                <div class="text-xs text-gray-500 mt-1">Notes</div>
+            </div>
+            <div class="bg-surface border border-border rounded-xl p-4 text-center">
+                <div class="text-2xl font-extrabold" id="stat-tags">-</div>
+                <div class="text-xs text-gray-500 mt-1">Tags</div>
+            </div>
+            <div class="bg-surface border border-border rounded-xl p-4 text-center">
+                <div class="text-2xl font-extrabold text-accent" id="stat-ai-today">-</div>
+                <div class="text-xs text-gray-500 mt-1">AI Today</div>
+            </div>
+            <div class="bg-surface border border-border rounded-xl p-4 text-center">
+                <div class="text-2xl font-extrabold" id="stat-ai-total">-</div>
+                <div class="text-xs text-gray-500 mt-1">AI Tokens</div>
+            </div>
+        </div>
+
+        <!-- Username -->
+        <div class="bg-surface border border-border rounded-2xl p-6 mb-6">
+            <h2 class="font-bold mb-4">Change Username</h2>
+            <form id="username-form" class="flex gap-3">
+                <input type="text" id="new-username" value="{{ username }}" required minlength="3"
+                    class="flex-1 bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-accent/50 transition-colors">
+                <button type="submit" class="bg-accent hover:bg-accent/90 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all">Save</button>
+            </form>
+        </div>
+
+        <!-- Password -->
+        <div class="bg-surface border border-border rounded-2xl p-6 mb-6">
+            <h2 class="font-bold mb-4">Change Password</h2>
+            <form id="password-form" class="space-y-3">
+                <input type="password" id="current-password" placeholder="Current password" required
+                    class="w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors">
+                <input type="password" id="new-password" placeholder="New password (min 6 chars)" required minlength="6"
+                    class="w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors">
+                <button type="submit" class="bg-accent hover:bg-accent/90 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all">Update Password</button>
+            </form>
+        </div>
+
+        <!-- Export/Import -->
+        <div class="bg-surface border border-border rounded-2xl p-6">
+            <h2 class="font-bold mb-4">Data</h2>
+            <div class="flex gap-3">
+                <button id="export-btn" class="border border-border hover:border-accent/40 hover:bg-accent/5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all">
+                    Export Notes (JSON)
+                </button>
+                <label class="border border-border hover:border-accent/40 hover:bg-accent/5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer">
+                    Import Notes (JSON)
+                    <input type="file" id="import-input" accept=".json" class="hidden">
+                </label>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2"></div>
+
+    <script>
+    (() => {
+        const toastContainer = document.getElementById("toast-container");
+
+        function showToast(message, type = "success") {
+            const toast = document.createElement("div");
+            const colors = type === "error" ? "bg-red-500/90 text-white" : "bg-green-500/90 text-white";
+            toast.className = `px-4 py-3 rounded-xl text-sm font-medium shadow-lg ${colors} backdrop-blur-sm`;
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+            setTimeout(() => {
+                toast.style.transition = "opacity 0.3s";
+                toast.style.opacity = "0";
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Load stats
+        fetch("/api/settings/stats").then(r => r.json()).then(data => {
+            document.getElementById("stat-notes").textContent = data.notes_count;
+            document.getElementById("stat-tags").textContent = data.tags_count;
+            document.getElementById("stat-ai-today").textContent = data.ai_today + "/10";
+            document.getElementById("stat-ai-total").textContent = data.ai_total_tokens.toLocaleString();
+        });
+
+        // Username
+        document.getElementById("username-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const username = document.getElementById("new-username").value.trim();
+            try {
+                const res = await fetch("/api/settings/username", {
+                    method: "PUT",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({username})
+                });
+                const data = await res.json();
+                showToast(data.message, data.success ? "success" : "error");
+            } catch { showToast("Network error", "error"); }
+        });
+
+        // Password
+        document.getElementById("password-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const current_password = document.getElementById("current-password").value;
+            const new_password = document.getElementById("new-password").value;
+            try {
+                const res = await fetch("/api/settings/password", {
+                    method: "PUT",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({current_password, new_password})
+                });
+                const data = await res.json();
+                showToast(data.message, data.success ? "success" : "error");
+                if (data.success) {
+                    document.getElementById("current-password").value = "";
+                    document.getElementById("new-password").value = "";
+                }
+            } catch { showToast("Network error", "error"); }
+        });
+
+        // Export
+        document.getElementById("export-btn").addEventListener("click", async () => {
+            try {
+                const res = await fetch("/api/notes/export");
+                const data = await res.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `zerotrace-notes-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast(`Exported ${data.notes_count} notes`);
+            } catch { showToast("Export failed", "error"); }
+        });
+
+        // Import
+        document.getElementById("import-input").addEventListener("change", async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                const res = await fetch("/api/notes/import", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                showToast(result.message, result.success ? "success" : "error");
+                if (result.success) setTimeout(() => location.reload(), 1000);
+            } catch { showToast("Invalid JSON file", "error"); }
+            e.target.value = "";
+        });
+    })();
+    </script>
+</body>
+</html>

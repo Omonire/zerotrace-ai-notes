@@ -1125,3 +1125,79 @@ tr:hover td {
 .animate-spin {
     animation: spin 1s linear infinite;
 }
+
+/* Quill Editor */
+.ql-toolbar.ql-snow {
+    border: 1px solid var(--border) !important;
+    border-radius: 12px 12px 0 0 !important;
+    background: var(--bg) !important;
+}
+
+.ql-container.ql-snow {
+    border: 1px solid var(--border) !important;
+    border-top: none !important;
+    border-radius: 0 0 12px 12px !important;
+    background: var(--bg) !important;
+    min-height: 150px;
+}
+
+.ql-editor {
+    color: var(--text) !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+}
+
+.ql-editor.ql-blank::before {
+    color: var(--muted) !important;
+    font-style: normal !important;
+}
+
+.ql-snow .ql-stroke {
+    stroke: var(--text-secondary) !important;
+}
+
+.ql-snow .ql-fill {
+    fill: var(--text-secondary) !important;
+}
+
+.ql-snow .ql-picker {
+    color: var(--text-secondary) !important;
+}
+
+.ql-snow .ql-picker-options {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    border-radius: 8px !important;
+}
+
+.ql-snow .ql-active .ql-stroke {
+    stroke: var(--accent) !important;
+}
+
+.ql-snow .ql-active .ql-fill {
+    fill: var(--accent) !important;
+}
+
+.ql-snow .ql-active {
+    color: var(--accent) !important;
+}
+
+.ql-toolbar.ql-snow .ql-formats {
+    margin-right: 10px !important;
+}
+
+.ql-snow a {
+    color: var(--accent) !important;
+}
+
+.ql-code-block {
+    background: var(--bg-secondary) !important;
+    border-radius: 8px !important;
+}
+
+.ql-blockquote {
+    border-left: 3px solid var(--accent) !important;
+    padding-left: 12px !important;
+    color: var(--text-secondary) !important;
+}
