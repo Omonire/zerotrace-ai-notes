@@ -1,9 +1,14 @@
 import sqlite3
 import os
+import hashlib
 
 Dir_name = os.path.abspath(__file__)
 path_dir_name = os.path.dirname(Dir_name)
 DATABASE = os.path.join(path_dir_name, 'AI_Notes.db')
+
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
 def get_db():
@@ -42,4 +47,14 @@ def init_db():
         )
     """)
     db.commit()
+
+    # Auto-seed default admin
+    admin = db.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
+    if not admin:
+        db.execute(
+            "INSERT INTO users (username, email, password, is_admin) VALUES (?, ?, ?, 1)",
+            ("admin", "admin@zerotrace.com", hash_password("admin123"))
+        )
+        db.commit()
+
     db.close()
