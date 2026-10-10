@@ -20,6 +20,9 @@ init_db()
 from auth import auth_bp
 app.register_blueprint(auth_bp)
 
+from fscss import fscss_bp
+app.register_blueprint(fscss_bp)
+
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
