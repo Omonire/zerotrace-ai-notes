@@ -300,6 +300,41 @@ def _split_decl(raw):
     return raw.strip(), ""
 
 
+def _split_args(text):
+    args, i, n = [], 0, len(text)
+    depth, q = 0, None
+    current = ""
+    while i < n:
+        ch = text[i]
+        if q:
+            current += ch
+            if ch == "\\":
+                if i + 1 < n:
+                    current += text[i + 1]
+                    i += 2
+                    continue
+            elif ch == q:
+                q = None
+        elif ch in "'\"":
+            q = ch
+            current += ch
+        elif ch in "([":
+            depth += 1
+            current += ch
+        elif ch in ")]":
+            depth -= 1
+            current += ch
+        elif ch == "," and depth == 0:
+            args.append(current.strip())
+            current = ""
+        else:
+            current += ch
+        i += 1
+    if current.strip():
+        args.append(current.strip())
+    return args
+
+
 def _parse_fun_name(raw):
     raw = raw.strip()
     if raw.startswith("@fun"):
@@ -468,17 +503,29 @@ class Compiler:
                     out.append(pad + mapped + ": " + value + ";")
             return
 
-        if raw.startswith("@fun") or raw.startswith("@"):
-            m = re.match(r"^@([A-Za-z_][\w-]*)\.?([\w.-]*)", raw)
+        if raw.startswith("@"):
+            m = re.match(r"^@([A-Za-z_][\w-]*)", raw)
             if m:
                 kind = m.group(1)
-                name = m.group(2) or raw.split(kind, 1)[1].lstrip(".")
-                name = name.strip()
-                if kind == "fun" and name:
-                    decls = self.stores.get(name.lstrip("."))
+                rest = raw[m.end():].lstrip()
+                if kind == "fun":
+                    name = rest.lstrip(".").strip()
+                    decls = self.stores.get(name)
                     if decls:
                         for prop, value in decls:
                             out.append(pad + prop + ": " + value + ";")
+                elif kind in self.defines:
+                    params, body = self.defines[kind]
+                    args = []
+                    if rest.startswith("("):
+                        open_idx = rest.index("(")
+                        close_idx = rest.rfind(")")
+                        args_text = rest[open_idx + 1:close_idx] if close_idx != -1 else ""
+                        args = _split_args(args_text)
+                    for param, arg in zip(params, args):
+                        body = re.sub(r"@use\s*\(\s*" + re.escape(param) + r"\s*\)", _expand_value(arg, vars_), body, flags=re.S)
+                    for prop, value in self._parse_declarations(body, vars_):
+                        out.append(pad + prop + ": " + value + ";")
                 return
             return
 

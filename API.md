@@ -1,6 +1,6 @@
 # API Reference
 
-Base URL: `https://your-domain.pythonanywhere.app`
+Base URL: `https://your-service.onrender.com`
 
 All POST/PUT endpoints accept `Content-Type: application/json`.
 

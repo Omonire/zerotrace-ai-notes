@@ -3,10 +3,10 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Admin Dashboard - ZeroTrace</title>
+    <title>Superadmin Dashboard - ZeroTrace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -16,16 +16,16 @@
         <div class="nav-inner">
             <a href="/" class="nav-logo">Zero<span>Trace</span></a>
             <div class="nav-links">
-                <span class="nav-badge">Admin</span>
+                <span class="nav-badge">Superadmin</span>
                 <a href="/app" class="btn-ghost">App</a>
-                <a href="/logout" class="btn-ghost">Logout</a>
+                <a href="/superadmin/logout" class="btn-ghost">Logout</a>
             </div>
         </div>
     </nav>
 
-    <main class="admin-page">
-        <div class="admin-header">
-            <h1>Dashboard</h1>
+    <main class="superadmin-page">
+        <div class="superadmin-header">
+            <h1>Superadmin Dashboard</h1>
             <p>Overview of your platform</p>
         </div>
 
@@ -68,7 +68,7 @@
             </div>
         </div>
 
-        <div class="admin-tables">
+        <div class="superadmin-tables">
             <div class="table-card">
                 <h3>All Users</h3>
                 <div class="table-wrap">
@@ -78,7 +78,6 @@
                                 <th>ID</th>
                                 <th>Username</th>
                                 <th>Email</th>
-                                <th>Role</th>
                                 <th>Joined</th>
                             </tr>
                         </thead>
@@ -88,13 +87,6 @@
                                 <td>{{ user['id'] }}</td>
                                 <td>{{ user['username'] }}</td>
                                 <td>{{ user['email'] }}</td>
-                                <td>
-                                    {% if user['is_admin'] %}
-                                        <span class="badge badge-admin">Admin</span>
-                                    {% else %}
-                                        <span class="badge">User</span>
-                                    {% endif %}
-                                </td>
                                 <td>{{ user['created_at'] }}</td>
                             </tr>
                             {% endfor %}

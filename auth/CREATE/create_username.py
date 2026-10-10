@@ -1,11 +1,6 @@
-import hashlib
 from flask import jsonify, request
 from auth import auth_bp
 from database import get_db
-
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
 
 
 @auth_bp.route("/create_username", methods=["POST"])
@@ -24,7 +19,10 @@ def create_username():
         if existing:
             return jsonify({"success": False, "message": "Username already taken"}), 409
 
-        db.execute("INSERT INTO users (username) VALUES (?)", (username,))
+        db.execute(
+            "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
+            (username, username + "@legacy.local", "")
+        )
         db.commit()
     finally:
         db.close()

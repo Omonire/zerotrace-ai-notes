@@ -1,14 +1,39 @@
-import sqlite3
-import os
+import hmac
 import hashlib
+import os
+import sqlite3
+
+from werkzeug.security import check_password_hash, generate_password_hash
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 Dir_name = os.path.abspath(__file__)
 path_dir_name = os.path.dirname(Dir_name)
-DATABASE = os.path.join(path_dir_name, 'AI_Notes.db')
+DATABASE = os.environ.get("DATABASE_PATH") or os.path.join(path_dir_name, 'AI_Notes.db')
 
 
 def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+    return generate_password_hash(password)
+
+
+def verify_password(password, stored):
+    if not stored:
+        return False
+    try:
+        if check_password_hash(stored, password):
+            return True
+    except (ValueError, TypeError):
+        pass
+    legacy = hashlib.sha256(password.encode()).hexdigest()
+    return hmac.compare_digest(stored, legacy)
+
+
+def needs_rehash(stored):
+    return bool(stored) and not stored.startswith(("pbkdf2:", "scrypt:"))
 
 
 def get_db():
@@ -117,14 +142,5 @@ def init_db():
         if col not in user_cols:
             db.execute(sql)
             db.commit()
-
-    # Auto-seed default admin
-    admin = db.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
-    if not admin:
-        db.execute(
-            "INSERT INTO users (username, email, password, is_admin, email_verified) VALUES (?, ?, ?, 1, 1)",
-            ("admin", "admin@zerotrace.com", hash_password("admin123"))
-        )
-        db.commit()
 
     db.close()

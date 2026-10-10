@@ -150,7 +150,7 @@ python app.py
 
 Open **http://localhost:5000**.
 
-> A default superadmin account is auto-seeded on first run: **username `admin` / password `admin123`**. Change it immediately in production.
+> The superadmin dashboard is at `/superadmin` and is secured by `SUPERADMIN_USERNAME` / `SUPERADMIN_PASSWORD` from the environment — no DB account is seeded.
 
 ---
 
@@ -163,12 +163,16 @@ Create a `.env` file in the project root:
 | `SECRET_KEY` | ✅ | Flask session signing key. Use a long random string. |
 | `FLASK_DEBUG` | ➖ | `true` for local dev, `false` in production. |
 | `OPENAI_API_KEY` | ⚪ | Enables the AI summarize/expand/rewrite features. |
-| `DATABASE_PATH` | ⚪ | Custom SQLite path (e.g. for a persistent disk on Render). _Planned — not yet read by `database.py`._ |
+| `SUPERADMIN_USERNAME` | ⚪ | Username for the `/superadmin` login (default `superadmin`). |
+| `SUPERADMIN_PASSWORD` | ⚪ | Password for the `/superadmin` login. Ignored/disabled when empty. |
+| `DATABASE_PATH` | ⚪ | Custom SQLite path (e.g. `/var/data/AI_Notes.db` on Render). Defaults to `AI_Notes.db` next to the source. |
 
 ```env
 SECRET_KEY=change-this-to-a-random-string
 OPENAI_API_KEY=sk-your-key-here
 FLASK_DEBUG=false
+SUPERADMIN_USERNAME=superadmin
+SUPERADMIN_PASSWORD=change-this-superadmin-password
 ```
 
 ---
@@ -207,7 +211,7 @@ Render's default filesystem is **ephemeral**, so `AI_Notes.db` is wiped on every
 1. Under **Settings → Disks**, add a disk (e.g. mount path `/var/data`).
 2. Point the app at it, e.g. set `DATABASE_PATH=/var/data/AI_Notes.db`.
 
-> `database.py` currently hardcodes the DB path next to the source. Reading `DATABASE_PATH` from the environment is required before the disk above takes effect.
+> `database.py` reads `DATABASE_PATH` from the environment, so pointing it at the mounted disk (e.g. `DATABASE_PATH=/var/data/AI_Notes.db`) is all that is required.
 
 For a production workload, consider migrating to a managed Postgres instance instead of SQLite.
 
@@ -218,7 +222,7 @@ For a production workload, consider migrating to a managed Postgres instance ins
 ```
 zerotrace-ai-notes/
 ├── app.py                  # Main Flask app: pages, notes, AI, tags, settings
-├── database.py             # SQLite setup, migrations, admin seeding
+├── database.py             # SQLite setup & migrations
 ├── requirements.txt        # Python dependencies
 ├── .env.example            # Environment variable template
 ├── API.md                  # Full REST API reference
@@ -246,7 +250,8 @@ zerotrace-ai-notes/
 │   ├── demo_index.html     # Main notes application
 │   ├── trash.html          # Recycle bin
 │   ├── settings.html       # User settings
-│   └── superadmin.html     # Admin dashboard
+│   └── superadmin.html     # Superadmin dashboard
+│   └── superadmin_login.html # Superadmin login
 │
 └── static/
     ├── css/
@@ -269,7 +274,7 @@ All `POST`/`PUT` endpoints accept `Content-Type: application/json` and return JS
 | `GET` | `/` | Landing page |
 | `GET` | `/app` | Notes application |
 | `GET` | `/waitlist` | Waitlist signup |
-| `GET` | `/superadmin/dashboard` | Admin dashboard |
+| `GET` | `/superadmin` | Superadmin login + dashboard |
 
 ### Notes
 
