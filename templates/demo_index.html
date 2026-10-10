@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Notes (ZeroTrace)</title>
+    <meta name="description" content="AI-powered notes by ZeroTrace. Capture, organize, and understand your ideas.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+</head>
+<body class="bg-bg text-gray-100 font-sans min-h-screen">
+
+    <nav class="sticky top-0 z-50 backdrop-blur-xl bg-bg/80 border-b border-border">
+        <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="/" class="text-xl font-extrabold tracking-tight">Zero<span class="text-accent">Trace</span></a>
+            <div class="flex items-center gap-3">
+                <span class="text-sm text-gray-400 hidden sm:inline">{{ username }}</span>
+                <a href="/trash" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Trash</a>
+                <a href="/settings" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Settings</a>
+                <a href="/" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Home</a>
+                <a href="/logout" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-white/5">Sign Out</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-6 py-10">
+
+        <!-- Editor -->
+        <section class="bg-surface border border-border rounded-2xl p-6 mb-10">
+            <div class="flex items-center justify-between mb-5">
+                <h2 id="editor-title" class="text-lg font-bold">Create a note</h2>
+                <button type="button" class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5" id="editor-cancel" style="display:none;">Cancel</button>
+            </div>
+            <form id="note-form">
+                <input type="hidden" id="edit-note-id" value="">
+                <div class="mb-4">
+                    <input id="note-title" type="text" placeholder="Note title" autocomplete="off" required
+                        class="w-full bg-bg border border-border rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors">
+                </div>
+
+                <!-- Tags -->
+                <div class="mb-4 flex items-center gap-2 flex-wrap">
+                    <span class="text-xs text-gray-500">Tags:</span>
+                    <div id="selected-tags" class="flex gap-1.5 flex-wrap"></div>
+                    <div class="relative">
+                        <button type="button" id="add-tag-btn" class="text-xs text-gray-500 hover:text-accent border border-border hover:border-accent/40 rounded-lg px-2 py-1 transition-colors">+ Tag</button>
+                        <div id="tag-dropdown" class="hidden absolute top-full left-0 mt-1 bg-surface border border-border rounded-xl shadow-xl z-20 w-56 max-h-60 overflow-y-auto">
+                            <div id="tag-list" class="p-2"></div>
+                            <div class="border-t border-border p-2">
+                                <div class="flex gap-1.5">
+                                    <input id="new-tag-name" type="text" placeholder="New tag" class="flex-1 bg-bg border border-border rounded-lg px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50">
+                                    <input id="new-tag-color" type="color" value="#7c5cff" class="w-7 h-7 rounded-lg cursor-pointer border-0 bg-transparent">
+                                    <button type="button" id="create-tag-btn" class="bg-accent hover:bg-accent/90 text-white text-xs px-2 py-1 rounded-lg transition-colors">Add</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rich Text Editor -->
+                <div class="mb-4">
+                    <div id="editor-container" class="bg-bg border border-border rounded-xl overflow-hidden"></div>
+                </div>
+                <textarea id="note-content" class="hidden"></textarea>
+
+                <!-- AI Toolbar -->
+                <div class="flex items-center gap-2 mb-4 flex-wrap" id="ai-toolbar">
+                    <span class="text-xs text-gray-500 mr-1">AI:</span>
+                    <button type="button" class="ai-btn" data-action="summarize">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/></svg>
+                        Summarize
+                    </button>
+                    <button type="button" class="ai-btn" data-action="expand">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/></svg>
+                        Expand
+                    </button>
+                    <button type="button" class="ai-btn" data-action="rewrite">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182"/></svg>
+                        Rewrite
+                    </button>
+                    <span class="text-xs text-gray-600 ml-auto" id="ai-remaining"></span>
+                </div>
+
+                <!-- AI Loading -->
+                <div id="ai-loading" class="hidden mb-4 bg-accent/5 border border-accent/20 rounded-xl px-4 py-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+                        <span class="text-sm text-accent">AI is thinking...</span>
+                    </div>
+                </div>
+
+                <!-- AI Result -->
+                <div id="ai-result" class="hidden mb-4 bg-bg border border-accent/30 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-xs font-semibold text-accent uppercase tracking-wider">AI Result</span>
+                        <div class="flex gap-2">
+                            <button type="button" id="ai-apply" class="text-xs bg-accent hover:bg-accent/90 text-white px-3 py-1 rounded-lg transition-colors">Apply</button>
+                            <button type="button" id="ai-discard" class="text-xs text-gray-400 hover:text-white px-3 py-1 rounded-lg hover:bg-white/5 transition-colors">Discard</button>
+                        </div>
+                    </div>
+                    <div id="ai-result-text" class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap"></div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <button type="submit" class="bg-accent hover:bg-accent/90 text-white font-semibold text-sm px-6 py-2.5 rounded-xl transition-all hover:scale-[1.02]" id="submit-btn">Save Note</button>
+                    <span class="text-xs text-gray-600 hidden sm:inline">Ctrl+S to save</span>
+                </div>
+            </form>
+        </section>
+
+        <!-- Notes -->
+        <section>
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-lg font-bold">Your Notes</h2>
+                    <span class="text-sm text-gray-500" id="notes-count">{{ notes|length }} note{{ 's' if notes|length != 1 else '' }}</span>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <select id="filter-tag" class="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-accent/50 transition-colors">
+                        <option value="">All tags</option>
+                        {% for tag in tags %}
+                            <option value="{{ tag['id'] }}">{{ tag['name'] }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="sort-select" class="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-gray-300 focus:outline-none focus:border-accent/50 transition-colors">
+                        <option value="newest" {{ 'selected' if sort == 'newest' }}>Newest first</option>
+                        <option value="oldest" {{ 'selected' if sort == 'oldest' }}>Oldest first</option>
+                        <option value="alpha" {{ 'selected' if sort == 'alpha' }}>A to Z</option>
+                        <option value="alpha_desc" {{ 'selected' if sort == 'alpha_desc' }}>Z to A</option>
+                    </select>
+                    <div class="relative">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <input type="text" id="search-input" placeholder="Search notes..." value="{{ search }}"
+                            class="bg-surface border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent/50 transition-colors w-56">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Skeletons -->
+            <div id="loading-skeletons" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 hidden">
+                <div class="bg-surface border border-border rounded-2xl p-5 animate-pulse">
+                    <div class="h-5 bg-border rounded w-2/3 mb-4"></div>
+                    <div class="space-y-2 mb-4">
+                        <div class="h-3 bg-border rounded w-full"></div>
+                        <div class="h-3 bg-border rounded w-4/5"></div>
+                    </div>
+                    <div class="h-px bg-border mb-3"></div>
+                    <div class="h-3 bg-border rounded w-1/3"></div>
+                </div>
+                <div class="bg-surface border border-border rounded-2xl p-5 animate-pulse">
+                    <div class="h-5 bg-border rounded w-1/2 mb-4"></div>
+                    <div class="space-y-2 mb-4">
+                        <div class="h-3 bg-border rounded w-full"></div>
+                        <div class="h-3 bg-border rounded w-3/4"></div>
+                    </div>
+                    <div class="h-px bg-border mb-3"></div>
+                    <div class="h-3 bg-border rounded w-1/4"></div>
+                </div>
+                <div class="bg-surface border border-border rounded-2xl p-5 animate-pulse hidden lg:block">
+                    <div class="h-5 bg-border rounded w-3/5 mb-4"></div>
+                    <div class="space-y-2 mb-4">
+                        <div class="h-3 bg-border rounded w-full"></div>
+                        <div class="h-3 bg-border rounded w-5/6"></div>
+                    </div>
+                    <div class="h-px bg-border mb-3"></div>
+                    <div class="h-3 bg-border rounded w-1/3"></div>
+                </div>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" id="notes-grid">
+                {% if notes %}
+                    {% for note in notes %}
+                        <article class="bg-surface border border-border rounded-2xl p-5 hover:border-accent/30 transition-colors group {{ 'border-accent/40 bg-accent/5' if note['is_pinned'] }}" data-id="{{ note['id'] }}">
+                            <div class="mb-4">
+                                <div class="flex items-center gap-2 mb-2">
+                                    {% if note['is_pinned'] %}
+                                        <svg class="w-3.5 h-3.5 text-accent flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
+                                    {% endif %}
+                                    <h3 class="font-bold group-hover:text-accent transition-colors {{ 'text-accent' if note['is_pinned'] }}">{{ note['title'] }}</h3>
+                                </div>
+                                <p class="text-sm text-gray-400 leading-relaxed line-clamp-3">{{ note['content'][:200] }}</p>
+                            </div>
+                            <div class="flex items-center justify-between pt-3 border-t border-border">
+                                <time class="text-xs text-gray-500" datetime="{{ note['created_at'] }}">
+                                    {% if note['updated_at'] != note['created_at'] %}
+                                        Updated {{ note['updated_at'] }}
+                                    {% else %}
+                                        {{ note['created_at'] }}
+                                    {% endif %}
+                                </time>
+                                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button class="btn-pin p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-accent transition-colors" data-id="{{ note['id'] }}" title="{{ 'Unpin' if note['is_pinned'] else 'Pin' }}">
+                                        <svg width="14" height="14" fill="{{ 'currentColor' if note['is_pinned'] else 'none' }}" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
+                                    </button>
+                                    <button class="btn-edit p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors" data-id="{{ note['id'] }}" title="Edit">
+                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>
+                                    </button>
+                                    <button class="btn-delete p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-red-400 transition-colors" data-id="{{ note['id'] }}" title="Delete">
+                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </article>
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            <div id="empty-state" class="text-center py-20 {{ 'hidden' if notes else '' }}">
+                <svg class="w-12 h-12 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+                <h3 class="font-bold text-gray-300 mb-1">No notes yet</h3>
+                <p class="text-sm text-gray-500">Create your first note above to get started.</p>
+            </div>
+
+            <div id="no-results" class="text-center py-20 hidden">
+                <svg class="w-12 h-12 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <h3 class="font-bold text-gray-300 mb-1">No results found</h3>
+                <p class="text-sm text-gray-500">Try a different search term.</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Shortcuts Modal -->
+    <div id="shortcuts-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-surface border border-border rounded-2xl p-6 w-full max-w-md">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="font-bold">Keyboard Shortcuts</h3>
+                <button id="close-shortcuts" class="text-gray-400 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="space-y-3 text-sm">
+                <div class="flex justify-between"><span class="text-gray-400">New note</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Ctrl+N</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Save note</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Ctrl+S</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Search</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Ctrl+K</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Cancel / Close</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Escape</kbd></div>
+                <div class="flex justify-between"><span class="text-gray-400">Show shortcuts</span><kbd class="bg-bg border border-border rounded px-2 py-0.5 text-xs font-mono">Ctrl+/</kbd></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2"></div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
