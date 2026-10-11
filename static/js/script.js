@@ -449,6 +449,7 @@
     if ((e.ctrlKey || e.metaKey) && e.key === "/") { e.preventDefault(); shortcutsModal.classList.toggle("hidden"); }
     if (e.key === "Escape") {
       if (!shortcutsModal.classList.contains("hidden")) shortcutsModal.classList.add("hidden");
+      else if (chatPanel && !chatPanel.classList.contains("hidden")) closeChat();
       else if (!tagDropdown.classList.contains("hidden")) tagDropdown.classList.add("hidden");
       else if (cancelBtn.style.display !== "none") resetEditor();
     }
@@ -456,6 +457,146 @@
 
   closeShortcuts.addEventListener("click", () => shortcutsModal.classList.add("hidden"));
   shortcutsModal.addEventListener("click", (e) => { if (e.target === shortcutsModal) shortcutsModal.classList.add("hidden"); });
+
+  // ─── AI Chat ─────────────────────────────────────────────
+  const chatLauncher = document.getElementById("chat-launcher");
+  const chatPanel = document.getElementById("chat-panel");
+  const chatMessages = document.getElementById("chat-messages");
+  const chatForm = document.getElementById("chat-form");
+  const chatInput = document.getElementById("chat-input");
+  const chatSend = document.getElementById("chat-send");
+  const chatClose = document.getElementById("chat-close");
+  const chatClear = document.getElementById("chat-clear");
+  let chatHistory = [];
+  let chatBusy = false;
+
+  function renderMarkdown(text) {
+    const parts = escapeHtml(text).split("```");
+    return parts.map((chunk, i) => {
+      if (i % 2 === 1) {
+        return `<pre class="bg-bg border border-border rounded-lg p-2 my-2 overflow-x-auto text-xs text-gray-300"><code>${chunk.replace(/^\n|\n$/g, "")}</code></pre>`;
+      }
+      const s = chunk
+        .replace(/`([^`]+)`/g, '<code class="bg-bg px-1 py-0.5 rounded text-accent2 text-[0.8em]">$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      let html = "";
+      let listOpen = false;
+      for (const line of s.split("\n")) {
+        const t = line.trim();
+        if (/^[-*]\s+/.test(t)) {
+          if (!listOpen) { html += '<ul class="list-disc pl-4 space-y-0.5 my-1">'; listOpen = true; }
+          html += `<li>${t.replace(/^[-*]\s+/, "")}</li>`;
+        } else {
+          if (listOpen) { html += "</ul>"; listOpen = false; }
+          html += t ? line + "<br>" : "<br>";
+        }
+      }
+      if (listOpen) html += "</ul>";
+      return html;
+    }).join("");
+  }
+
+  function addMessage(role, text) {
+    const empty = document.getElementById("chat-empty");
+    if (empty) empty.remove();
+    const row = document.createElement("div");
+    row.className = role === "user" ? "flex justify-end" : "flex justify-start";
+    const bubble = document.createElement("div");
+    bubble.className = role === "user"
+      ? "max-w-[85%] bg-accent text-white rounded-2xl rounded-br-md px-3.5 py-2 text-sm whitespace-pre-wrap break-words"
+      : "max-w-[92%] bg-surface2 border border-border text-gray-200 rounded-2xl rounded-bl-md px-3.5 py-2 text-sm leading-relaxed break-words";
+    if (role === "user") bubble.textContent = text;
+    else bubble.innerHTML = renderMarkdown(text);
+    row.appendChild(bubble);
+    chatMessages.appendChild(row);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return bubble;
+  }
+
+  function addTyping() {
+    const row = document.createElement("div");
+    row.className = "flex justify-start";
+    row.innerHTML = '<div class="bg-surface2 border border-border rounded-2xl rounded-bl-md px-3.5 py-2.5 flex items-center gap-1.5">' +
+      '<span class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"></span>' +
+      '<span class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay:0.15s"></span>' +
+      '<span class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay:0.3s"></span></div>';
+    chatMessages.appendChild(row);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return row;
+  }
+
+  function autoGrow() {
+    chatInput.style.height = "auto";
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 128) + "px";
+  }
+
+  function openChat() {
+    chatPanel.classList.remove("hidden");
+    chatPanel.classList.add("flex");
+    chatInput.focus();
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function closeChat() {
+    chatPanel.classList.add("hidden");
+    chatPanel.classList.remove("flex");
+  }
+
+  chatLauncher.addEventListener("click", () => {
+    if (chatPanel.classList.contains("hidden")) openChat(); else closeChat();
+  });
+  chatClose.addEventListener("click", closeChat);
+  chatClear.addEventListener("click", () => {
+    chatHistory = [];
+    chatMessages.innerHTML = '<div id="chat-empty" class="text-center py-10">' +
+      '<p class="text-sm text-gray-400 mb-1">Ask me anything about your notes.</p>' +
+      '<p class="text-xs text-gray-500">"Summarize my meeting notes" &middot; "What did I plan for Porto?"</p></div>';
+  });
+  chatInput.addEventListener("input", autoGrow);
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chatForm.requestSubmit(); }
+  });
+
+  chatForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = chatInput.value.trim();
+    if (!text || chatBusy) return;
+    chatBusy = true;
+    chatSend.disabled = true;
+    chatHistory.push({ role: "user", content: text });
+    addMessage("user", text);
+    chatInput.value = "";
+    autoGrow();
+    const typing = addTyping();
+    try {
+      const res = await fetch("/api/bot/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: chatHistory }),
+      });
+      const data = await res.json();
+      typing.remove();
+      if (data.success) {
+        chatHistory.push({ role: "assistant", content: data.reply });
+        const bubble = addMessage("assistant", data.reply);
+        if (Array.isArray(data.sources) && data.sources.length) {
+          const src = document.createElement("div");
+          src.className = "mt-2 pt-2 border-t border-border text-[11px] text-gray-500";
+          src.textContent = "From: " + data.sources.slice(0, 4).map((s) => '"' + s.title + '"').join(", ");
+          bubble.appendChild(src);
+        }
+      } else {
+        addMessage("assistant", "⚠️ " + (data.message || "Something went wrong."));
+      }
+    } catch {
+      typing.remove();
+      addMessage("assistant", "⚠️ Network error. Please try again.");
+    } finally {
+      chatBusy = false;
+      chatSend.disabled = false;
+      if (!chatPanel.classList.contains("hidden")) chatInput.focus();
+    }
+  });
 
   // ─── Init ────────────────────────────────────────────────
   loadTags();

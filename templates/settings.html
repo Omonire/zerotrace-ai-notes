@@ -6,9 +6,30 @@
     <title>Settings - ZeroTrace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    bg: '#08080c',
+                    surface: '#12141b',
+                    surface2: '#171a24',
+                    border: '#1e2130',
+                    accent: '#7c5cff',
+                    accent2: '#8f70ff',
+                },
+                fontFamily: {
+                    heading: ['Space Grotesk', 'sans-serif'],
+                    sans: ['DM Sans', 'sans-serif'],
+                    mono: ['JetBrains Mono', 'monospace'],
+                }
+            }
+        }
+    }
+    </script>
 </head>
 <body class="bg-bg text-gray-100 font-sans min-h-screen">
 
