@@ -2,3 +2,5 @@ Flask
 python-dotenv
 openai
 gunicorn
+scikit-learn
+joblib

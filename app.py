@@ -27,6 +27,9 @@ app.register_blueprint(fscss_bp)
 from Bot import bot_bp
 app.register_blueprint(bot_bp)
 
+from Classifier import classifier_bp
+app.register_blueprint(classifier_bp)
+
 
 def login_required(f):
     from functools import wraps
