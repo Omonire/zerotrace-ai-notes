@@ -1,4 +1,4 @@
-"""Central OpenAI integration for AI Notes.
+"""Central AI integration for AI Notes.
 
 Reads configuration from the environment and exposes a small, dependency-light
 API used across the app:
@@ -8,8 +8,8 @@ API used across the app:
     ai.run(action, content) -> (text, tokens)
     ai.complete(messages)   -> (text, tokens)
 
-Uses the official ``openai`` SDK when installed and transparently falls back
-to a raw HTTPS request otherwise, so the app keeps working either way.
+Uses OpenAI when configured. Browser clients may use Puter.js directly;
+the server does not train or load a local ML model.
 """
 
 import json
@@ -53,6 +53,10 @@ def base_url():
 
 def is_configured():
     return bool(api_key())
+
+
+def backend():
+    return "openai" if api_key() else "puter"
 
 
 def _client():
@@ -119,8 +123,8 @@ def _http_chat(messages, model_name, max_tokens, temperature):
 
 
 def complete(messages, model_name=None, max_tokens=2000, temperature=0.7, system=None):
-    if not is_configured():
-        raise AIError("AI not configured. Set OPENAI_API_KEY in .env", 503)
+    if not api_key():
+        raise AIError("No AI backend is available", 503)
 
     model_name = (model_name or "").strip() or model()
     convo = []

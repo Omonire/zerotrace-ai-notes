@@ -44,7 +44,7 @@ Summarize, expand, and rewrite any note with built-in AI — no plugins, no bloa
 
 **AI Notes by ZeroTrace** is an open-source, self-hosted **AI note-taking app** powered by **Python and Flask**. It is the first release (V1) of the ZeroTrace Workflow AI platform — a productivity suite for developers, students, and teams who want a fast, privacy-friendly alternative to heavy SaaS note tools.
 
-Unlike traditional note apps, AI Notes ships with an **AI assistant** that can summarize, expand, and rewrite your notes using **OpenAI GPT-4o-mini** — directly inside your workflow. Notes are stored locally in **SQLite**, so you keep full ownership of your data.
+Unlike traditional note apps, AI Notes ships with an **AI assistant** that can summarize, expand, and rewrite your notes using **Puter.js** in the browser, with optional OpenAI fallback. Notes are stored locally in **SQLite**, so you keep full ownership of your data.
 
 Whether you are looking for a **free note-taking app**, a **self-hosted notes server**, a **Flask notes app with a REST API**, or a **base project for an AI productivity tool**, AI Notes is a clean, hackable starting point.
 
@@ -60,7 +60,7 @@ Whether you are looking for a **free note-taking app**, a **self-hosted notes se
 
 ## Features
 
-- **AI note assistant** — summarize, expand, and rewrite notes with OpenAI (`GPT-4o-mini`), capped at 10 actions per user per day.
+- **AI note assistant** — use Puter.js in the browser for summarize, expand, rewrite, explain, title, translation, and todos, with optional OpenAI server fallback.
 - **Full note CRUD** — create, edit, read, and delete notes through the UI or the REST API.
 - **Real-time search** — instant filtering across titles and content.
 - **Tags & colors** — organize notes with colored tags and filter by tag.
@@ -84,7 +84,7 @@ Whether you are looking for a **free note-taking app**, a **self-hosted notes se
 |-------|-----------|
 | **Backend** | Python 3, Flask (blueprints) |
 | **Database** | SQLite (auto-migrating, auto-seeding) |
-| **AI** | OpenAI Chat Completions API (`gpt-4o-mini`) |
+| **AI** | Puter.js browser inference with optional OpenAI server fallback |
 | **Frontend** | HTML5, JavaScript, FSCSS |
 | **Styling engine** | FSCSS — a custom pure-Python CSS preprocessor |
 | **Auth** | Flask sessions + SHA-256 password hashing |
@@ -109,7 +109,8 @@ Whether you are looking for a **free note-taking app**, a **self-hosted notes se
 
 - Python 3.10 or newer
 - `pip` and `venv`
-- (Optional) An OpenAI API key for AI features
+- A browser with JavaScript enabled for Puter.js AI features
+- (Optional) An OpenAI API key for server fallback
 
 ### 1. Clone the repository
 
@@ -336,7 +337,8 @@ All `POST`/`PUT` endpoints accept `Content-Type: application/json` and return JS
 Yes. AI Notes is released under the MIT license and can be self-hosted at no cost.
 
 **What do I need to run the AI features?**
-An OpenAI API key (`OPENAI_API_KEY`). Without it, all non-AI features work normally.
+Puter.js runs the note actions in the browser. If Puter.js is unavailable, configure
+`OPENAI_API_KEY` to enable the server fallback.
 
 **Where is my data stored?**
 Notes are stored in a local SQLite database (`AI_Notes.db`). You own your data.
@@ -345,10 +347,13 @@ Notes are stored in a local SQLite database (`AI_Notes.db`). You own your data.
 Yes — the repo is configured for one-click deployment on Render's free tier.
 
 **Which model does the AI use?**
-OpenAI `gpt-4o-mini` via the Chat Completions API.
+Puter.js selects its hosted model. The optional server fallback uses OpenAI
+`gpt-4o-mini`.
 
-**Can I use it without OpenAI?**
-Yes. AI features simply return a "not configured" message; everything else works.
+**Does Puter.js train the model?**
+No. Puter.js provides hosted inference; it does not train or fine-tune a model.
+The application no longer includes a local ML classifier. Training would require
+a separate dataset, training pipeline, and model-serving system.
 
 ---
 

@@ -1,11 +1,13 @@
 import re
 
 from flask import jsonify, request, session
-
+import os
 from Bot import bot_bp
 from database import get_db
 import ai
 
+
+# System_Propmt = os.environ(SYSTEM_PROMPT)
 SYSTEM_PROMPT = (
     "You are ZeroTrace AI, a concise, helpful assistant built into a note-taking app. "
     "You have access to the user's own notes, provided below as context. "
@@ -100,9 +102,6 @@ def bot_chat():
     if not clean:
         return jsonify({"success": False, "message": "No valid messages"}), 400
 
-    if not ai.is_configured():
-        return jsonify({"success": False, "message": "AI not configured. Set OPENAI_API_KEY in .env"}), 503
-
     query = clean[-1]["content"]
     notes = _load_notes(get_db(), session["user_id"], query)
     context = _build_context(notes)
@@ -122,5 +121,6 @@ def bot_chat():
         "reply": reply,
         "tokens_used": tokens,
         "model": ai.model(),
+        "backend": ai.backend(),
         "sources": [{"id": row["id"], "title": row["title"]} for row in notes],
     })

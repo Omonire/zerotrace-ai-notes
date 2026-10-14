@@ -16,19 +16,19 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
 SUPERADMIN_USERNAME = os.environ.get("SUPERADMIN_USERNAME", "superadmin")
 SUPERADMIN_PASSWORD = os.environ.get("SUPERADMIN_PASSWORD", "")
 
-init_db()
+def register_app_routers(flask_app):
+    """Initialize the database and register all application blueprints."""
+    init_db()
 
-from auth import auth_bp
-app.register_blueprint(auth_bp)
+    from auth import auth_bp
+    from fscss import fscss_bp
+    from Bot import bot_bp
+    for blueprint in (auth_bp, fscss_bp, bot_bp):
+        if blueprint.name not in flask_app.blueprints:
+            flask_app.register_blueprint(blueprint)
 
-from fscss import fscss_bp
-app.register_blueprint(fscss_bp)
 
-from Bot import bot_bp
-app.register_blueprint(bot_bp)
-
-from Classifier import classifier_bp
-app.register_blueprint(classifier_bp)
+register_app_routers(app)
 
 
 def login_required(f):
@@ -702,6 +702,7 @@ def ai_config():
     return jsonify({
         "configured": ai.is_configured(),
         "model": ai.model(),
+        "backend": ai.backend(),
         "actions": sorted(ai.ACTIONS),
         "daily_limit": ai.DAILY_LIMIT,
     })
@@ -717,9 +718,6 @@ def ai_action(action):
     content = (data.get("content") or "").strip()
     if not content:
         return jsonify({"success": False, "message": "No content to process"}), 400
-
-    if not ai.is_configured():
-        return jsonify({"success": False, "message": "AI not configured. Set OPENAI_API_KEY in .env"}), 503
 
     db = get_db()
     try:
@@ -748,6 +746,7 @@ def ai_action(action):
         "success": True,
         "result": result_text,
         "action": action,
+        "backend": ai.backend(),
         "tokens_used": tokens,
         "remaining_today": max(0, ai.DAILY_LIMIT - (usage + 1))
     })

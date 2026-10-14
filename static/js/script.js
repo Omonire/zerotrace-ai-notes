@@ -22,6 +22,7 @@
   const aiApply = document.getElementById("ai-apply");
   const aiDiscard = document.getElementById("ai-discard");
   const aiRemaining = document.getElementById("ai-remaining");
+  const aiProvider = document.getElementById("ai-provider");
   const addTagBtn = document.getElementById("add-tag-btn");
   const tagDropdown = document.getElementById("tag-dropdown");
   const tagList = document.getElementById("tag-list");
@@ -360,6 +361,48 @@
   }
   fetchAiUsage();
 
+  async function updateAiProviderStatus() {
+    if (!aiProvider) return;
+    try {
+      const response = await fetch("/api/ai/config");
+      const config = await response.json();
+      if (window.puter?.ai?.chat) aiProvider.textContent = "Provider: Puter (external)";
+      else if (config.backend === "openai") aiProvider.textContent = "Provider: OpenAI fallback";
+      else aiProvider.textContent = "Provider unavailable";
+    } catch {
+      aiProvider.textContent = "Provider unavailable";
+    }
+  }
+  updateAiProviderStatus();
+
+  function extractPuterText(response) {
+    if (typeof response === "string") return response.trim();
+    return String(
+      response?.message?.content
+      || response?.text
+      || response?.content
+      || ""
+    ).trim();
+  }
+
+  async function runPuterAction(action, content) {
+    if (!window.puter?.ai?.chat) return null;
+    const prompts = {
+      summarize: "Create a concise summary with the key points and decisions. Use short paragraphs or bullets where useful.",
+      expand: "Expand this note with useful context and structure, without inventing facts. Preserve the author's intent.",
+      rewrite: "Rewrite this note to be clear, polished, and well organized. Preserve all factual meaning.",
+      explain: "Explain this note in simple language. Clarify the main idea and any implied next steps.",
+      title: "Generate one specific, descriptive title in no more than 8 words. Return only the title.",
+      todos: "Extract concrete action items. Return a short Markdown checklist and include deadlines when stated.",
+      translate: "Translate this note accurately. Preserve formatting and meaning. Return only the translation.",
+    };
+    const prompt = `${prompts[action] || "Improve this note while preserving its meaning."}\n\nNote:\n${content}`;
+    const response = await window.puter.ai.chat(prompt);
+    const text = extractPuterText(response);
+    if (!text) throw new Error("Puter returned an empty result");
+    return text;
+  }
+
   aiToolbar.addEventListener("click", async (e) => {
     const btn = e.target.closest(".ai-btn");
     if (!btn) return;
@@ -370,17 +413,28 @@
     aiLoading.classList.remove("hidden");
     hideAiResult();
     try {
-      const res = await fetch(`/api/ai/${action}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      const data = await res.json();
+      let data;
+      if (window.puter?.ai?.chat) {
+        try {
+          const result = await runPuterAction(action, content);
+          data = { success: true, result, backend: "puter" };
+        } catch (puterError) {
+          console.warn("Puter AI unavailable; using server fallback.", puterError);
+        }
+      }
+      if (!data) {
+        const res = await fetch(`/api/ai/${action}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        });
+        data = await res.json();
+      }
       if (data.success) {
         aiResultContent = data.result;
         aiResultText.textContent = data.result;
         aiResult.classList.remove("hidden");
-        showToast(`AI ${action} complete`, "ai");
+        showToast(`${data.backend === "puter" ? "Puter" : "AI"} ${action} complete`, "ai");
         fetchAiUsage();
       } else { showToast(data.message || "AI failed", "error"); }
     } catch { showToast("Network error", "error"); }

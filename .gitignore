@@ -9,3 +9,6 @@ AI_Notes.db
 
 # Legacy duplicate static assets
 Templates/static/
+
+# Playwright artifacts
+.playwright-mcp/
