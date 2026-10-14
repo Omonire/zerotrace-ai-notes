@@ -1,11 +1,6 @@
-import hashlib
 from flask import jsonify, request
 from auth import auth_bp
-from database import get_db
-
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+from database import get_db, hash_password
 
 
 @auth_bp.route("/create_password", methods=["POST"])

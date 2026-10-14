@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign Up - ZeroTrace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">Zero<span>Trace</span></a>
+            <div class="nav-links">
+                <a href="/signin" class="btn-ghost">Sign In</a>
+            </div>
+        </div>
+    </nav>
+    <main class="auth-page">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>Create an account</h1>
+                <p>Start building with ZeroTrace</p>
+            </div>
+            <form id="signup-form">
+                <div class="form-group">
+                    <label for="su-username">Username</label>
+                    <input id="su-username" type="text" placeholder="johndoe" autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="su-email">Email</label>
+                    <input id="su-email" type="email" placeholder="john@example.com" autocomplete="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="su-password">Password</label>
+                    <input id="su-password" type="password" placeholder="At least 6 characters" autocomplete="new-password" required>
+                </div>
+                <div id="su-error" class="auth-error" style="display:none;"></div>
+                <button type="submit" class="btn-primary btn-lg btn-full" id="su-submit">Create Account</button>
+            </form>
+            <p class="auth-switch">Already have an account? <a href="/signin">Sign in</a></p>
+        </div>
+    </main>
+    <script>
+    (() => {
+        const form = document.getElementById("signup-form");
+        const errorEl = document.getElementById("su-error");
+        const submitBtn = document.getElementById("su-submit");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            errorEl.style.display = "none";
+            const username = document.getElementById("su-username").value.trim();
+            const email = document.getElementById("su-email").value.trim();
+            const password = document.getElementById("su-password").value.trim();
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Creating account...";
+
+            try {
+                const res = await fetch("/api/signup", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, email, password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    window.location.href = "/app";
+                } else {
+                    errorEl.textContent = data.message;
+                    errorEl.style.display = "block";
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "Create Account";
+                }
+            } catch {
+                errorEl.textContent = "Network error. Try again.";
+                errorEl.style.display = "block";
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Create Account";
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

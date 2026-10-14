@@ -1,10 +1,8 @@
 import os
-import hashlib
-import json
 import secrets
 import time
 from flask import Flask, render_template, request, redirect, jsonify, session
-from database import init_db, get_db
+from database import init_db, get_db, hash_password, needs_rehash, verify_password
 
 try:
     from dotenv import load_dotenv
@@ -15,17 +13,22 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
 
-init_db()
+SUPERADMIN_USERNAME = os.environ.get("SUPERADMIN_USERNAME", "superadmin")
+SUPERADMIN_PASSWORD = os.environ.get("SUPERADMIN_PASSWORD", "")
 
-from auth import auth_bp
-app.register_blueprint(auth_bp)
+def register_app_routers(flask_app):
+    """Initialize the database and register all application blueprints."""
+    init_db()
 
-from fscss import fscss_bp
-app.register_blueprint(fscss_bp)
+    from auth import auth_bp
+    from fscss import fscss_bp
+    from Bot import bot_bp
+    for blueprint in (auth_bp, fscss_bp, bot_bp):
+        if blueprint.name not in flask_app.blueprints:
+            flask_app.register_blueprint(blueprint)
 
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+register_app_routers(app)
 
 
 def login_required(f):
@@ -113,7 +116,7 @@ def get_ai_usage_today(db, user_id):
 
 @app.route("/")
 def landing():
-    return render_template("landing.html")
+    return render_template("landing.html", signed_in="user_id" in session)
 
 
 @app.route("/waitlist", methods=["GET"])
@@ -199,7 +202,6 @@ def signup():
         user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         session["user_id"] = user["id"]
         session["username"] = user["username"]
-        session["is_admin"] = user["is_admin"]
         return jsonify({"success": True, "message": "Account created", "verification_token": token}), 201
     finally:
         db.close()
@@ -260,14 +262,17 @@ def signin():
     db = get_db()
     try:
         user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-        if not user or user["password"] != hash_password(password):
+        if not user or not verify_password(password, user["password"]):
             record_login_attempt(ip)
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
+
+        if needs_rehash(user["password"]):
+            db.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(password), user["id"]))
+            db.commit()
 
         record_login_attempt(ip)
         session["user_id"] = user["id"]
         session["username"] = user["username"]
-        session["is_admin"] = user["is_admin"]
         return jsonify({"success": True, "message": "Signed in", "email_verified": bool(user["email_verified"])})
     finally:
         db.close()
@@ -281,18 +286,22 @@ def logout():
 
 # ─── Superadmin ─────────────────────────────────────────────────
 
-@app.route("/superadmin/dashboard")
-def superadmin_dashboard():
-    if not session.get("is_admin"):
-        return redirect("/signin")
+def superadmin_configured():
+    return bool(SUPERADMIN_PASSWORD)
 
+
+def is_superadmin():
+    return session.get("is_superadmin") is True
+
+
+def superadmin_dashboard_context():
     db = get_db()
     try:
         total_users = db.execute("SELECT COUNT(*) as count FROM users").fetchone()["count"]
         total_notes = db.execute("SELECT COUNT(*) as count FROM notes").fetchone()["count"]
         total_waitlist = db.execute("SELECT COUNT(*) as count FROM waitlist").fetchone()["count"]
 
-        users = db.execute("SELECT id, username, email, is_admin, created_at FROM users ORDER BY created_at DESC").fetchall()
+        users = db.execute("SELECT id, username, email, created_at FROM users ORDER BY created_at DESC").fetchall()
         recent_notes = db.execute("SELECT id, title, created_at FROM notes ORDER BY created_at DESC LIMIT 10").fetchall()
 
         users_per_day = db.execute("""
@@ -321,26 +330,60 @@ def superadmin_dashboard():
     finally:
         db.close()
 
-    return render_template("superadmin.html",
-        total_users=total_users,
-        total_notes=total_notes,
-        total_waitlist=total_waitlist,
-        users=users,
-        recent_notes=recent_notes,
-        users_per_day=users_per_day,
-        notes_per_day=notes_per_day,
-        waitlist_per_day=waitlist_per_day
-    )
+    return {
+        "total_users": total_users,
+        "total_notes": total_notes,
+        "total_waitlist": total_waitlist,
+        "users": users,
+        "recent_notes": recent_notes,
+        "users_per_day": users_per_day,
+        "notes_per_day": notes_per_day,
+        "waitlist_per_day": waitlist_per_day,
+    }
 
 
-@app.route("/api/admin/users", methods=["GET"])
-def admin_get_users():
-    if not session.get("is_admin"):
+@app.route("/superadmin")
+def superadmin():
+    if not is_superadmin():
+        return render_template("superadmin_login.html", configured=superadmin_configured())
+    return render_template("superadmin.html", **superadmin_dashboard_context())
+
+
+@app.route("/superadmin/login", methods=["POST"])
+def superadmin_login():
+    if not superadmin_configured():
+        return jsonify({"success": False, "message": "Superadmin is not configured. Set SUPERADMIN_PASSWORD in .env"}), 503
+
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+
+    ip = request.remote_addr
+    if not check_rate_limit(ip):
+        return jsonify({"success": False, "message": "Too many attempts. Try again in 15 minutes."}), 429
+
+    if not (secrets.compare_digest(username, SUPERADMIN_USERNAME) and secrets.compare_digest(password, SUPERADMIN_PASSWORD)):
+        record_login_attempt(ip)
+        return jsonify({"success": False, "message": "Invalid superadmin credentials"}), 401
+
+    session["is_superadmin"] = True
+    return jsonify({"success": True, "message": "Signed in as superadmin"})
+
+
+@app.route("/superadmin/logout")
+def superadmin_logout():
+    session.pop("is_superadmin", None)
+    return redirect("/superadmin")
+
+
+@app.route("/api/superadmin/users", methods=["GET"])
+def superadmin_get_users():
+    if not is_superadmin():
         return jsonify({"success": False, "message": "Unauthorized"}), 403
 
     db = get_db()
     try:
-        users = db.execute("SELECT id, username, email, is_admin, created_at FROM users ORDER BY created_at DESC").fetchall()
+        users = db.execute("SELECT id, username, email, created_at FROM users ORDER BY created_at DESC").fetchall()
     finally:
         db.close()
 
@@ -348,7 +391,6 @@ def admin_get_users():
         "id": u["id"],
         "username": u["username"],
         "email": u["email"],
-        "is_admin": bool(u["is_admin"]),
         "created_at": u["created_at"]
     } for u in users])
 
@@ -652,96 +694,62 @@ def delete_note(note_id):
 
 # ─── AI Routes ──────────────────────────────────────────────────
 
-AI_ACTIONS = {
-    "summarize": "Summarize the following note concisely. Keep the key points and main ideas. Output only the summary, no preamble.",
-    "expand": "Expand the following note with more detail, context, and depth. Keep the original meaning. Output only the expanded text.",
-    "rewrite": "Rewrite the following note to be clearer and more polished. Keep the meaning but improve flow and readability. Output only the rewritten text.",
-}
+import ai
+
+
+@app.route("/api/ai/config", methods=["GET"])
+def ai_config():
+    return jsonify({
+        "configured": ai.is_configured(),
+        "model": ai.model(),
+        "backend": ai.backend(),
+        "actions": sorted(ai.ACTIONS),
+        "daily_limit": ai.DAILY_LIMIT,
+    })
 
 
 @app.route("/api/ai/<action>", methods=["POST"])
 @login_required
 def ai_action(action):
-    if action not in AI_ACTIONS:
-        return jsonify({"success": False, "message": "Invalid action. Use: summarize, expand, rewrite"}), 400
+    if action not in ai.ACTIONS:
+        return jsonify({"success": False, "message": "Invalid action. Use: " + ", ".join(sorted(ai.ACTIONS))}), 400
 
-    data = request.get_json()
-    if not data:
-        return jsonify({"success": False, "message": "No data received"}), 400
-
-    content = data.get("content", "").strip()
+    data = request.get_json(silent=True) or {}
+    content = (data.get("content") or "").strip()
     if not content:
         return jsonify({"success": False, "message": "No content to process"}), 400
-
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
-        return jsonify({"success": False, "message": "AI not configured. Set OPENAI_API_KEY in .env"}), 503
 
     db = get_db()
     try:
         usage = get_ai_usage_today(db, session["user_id"])
-        if usage >= 10:
-            return jsonify({"success": False, "message": "Daily AI limit reached (10/day). Try again tomorrow."}), 429
+        if usage >= ai.DAILY_LIMIT:
+            return jsonify({"success": False, "message": "Daily AI limit reached (%d/day). Try again tomorrow." % ai.DAILY_LIMIT}), 429
     finally:
         db.close()
 
     try:
-        import urllib.request
+        result_text, tokens = ai.run(action, content, model_name=data.get("model"))
+    except ai.AIError as exc:
+        return jsonify({"success": False, "message": exc.message}), exc.status
 
-        system_prompt = AI_ACTIONS[action]
-        payload = json.dumps({
-            "model": "gpt-4o-mini",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": content}
-            ],
-            "max_tokens": 2000,
-            "temperature": 0.7
-        })
-
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions",
-            data=payload.encode(),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}"
-            }
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT INTO ai_usage (user_id, action, tokens_used) VALUES (?, ?, ?)",
+            (session["user_id"], action, tokens)
         )
+        db.commit()
+    finally:
+        db.close()
 
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode())
-
-        result_text = result["choices"][0]["message"]["content"].strip()
-        tokens = result.get("usage", {}).get("total_tokens", 0)
-
-        db = get_db()
-        try:
-            db.execute(
-                "INSERT INTO ai_usage (user_id, action, tokens_used) VALUES (?, ?, ?)",
-                (session["user_id"], action, tokens)
-            )
-            db.commit()
-        finally:
-            db.close()
-
-        return jsonify({
-            "success": True,
-            "result": result_text,
-            "action": action,
-            "tokens_used": tokens,
-            "remaining_today": 9 - usage
-        })
-
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode()
-        try:
-            error_data = json.loads(error_body)
-            msg = error_data.get("error", {}).get("message", "AI request failed")
-        except Exception:
-            msg = "AI request failed"
-        return jsonify({"success": False, "message": msg}), 502
-    except Exception as e:
-        return jsonify({"success": False, "message": "AI service unavailable"}), 502
+    return jsonify({
+        "success": True,
+        "result": result_text,
+        "action": action,
+        "backend": ai.backend(),
+        "tokens_used": tokens,
+        "remaining_today": max(0, ai.DAILY_LIMIT - (usage + 1))
+    })
 
 
 @app.route("/api/ai/usage", methods=["GET"])
@@ -752,7 +760,7 @@ def ai_usage():
         usage = get_ai_usage_today(db, session["user_id"])
     finally:
         db.close()
-    return jsonify({"used": usage, "limit": 10, "remaining": 10 - usage})
+    return jsonify({"used": usage, "limit": ai.DAILY_LIMIT, "remaining": max(0, ai.DAILY_LIMIT - usage)})
 
 
 # ─── Tags Routes ───────────────────────────────────────────────
@@ -941,7 +949,7 @@ def update_password():
     db = get_db()
     try:
         user = db.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
-        if not user or user["password"] != hash_password(current):
+        if not user or not verify_password(current, user["password"]):
             return jsonify({"success": False, "message": "Current password is incorrect"}), 401
         db.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(new_password), session["user_id"]))
         db.commit()
@@ -972,4 +980,4 @@ def user_stats():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
+    app.run(host="0.0.0.0", debug=os.environ.get("FLASK_DEBUG", "true").lower() == "true")

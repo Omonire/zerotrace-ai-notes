@@ -6,3 +6,9 @@ AI_Notes.db
 *.db
 .vscode/
 .idea/
+
+# Legacy duplicate static assets
+Templates/static/
+
+# Playwright artifacts
+.playwright-mcp/

@@ -44,7 +44,7 @@ Summarize, expand, and rewrite any note with built-in AI — no plugins, no bloa
 
 **AI Notes by ZeroTrace** is an open-source, self-hosted **AI note-taking app** powered by **Python and Flask**. It is the first release (V1) of the ZeroTrace Workflow AI platform — a productivity suite for developers, students, and teams who want a fast, privacy-friendly alternative to heavy SaaS note tools.
 
-Unlike traditional note apps, AI Notes ships with an **AI assistant** that can summarize, expand, and rewrite your notes using **OpenAI GPT-4o-mini** — directly inside your workflow. Notes are stored locally in **SQLite**, so you keep full ownership of your data.
+Unlike traditional note apps, AI Notes ships with an **AI assistant** that can summarize, expand, and rewrite your notes using **Puter.js** in the browser, with optional OpenAI fallback. Notes are stored locally in **SQLite**, so you keep full ownership of your data.
 
 Whether you are looking for a **free note-taking app**, a **self-hosted notes server**, a **Flask notes app with a REST API**, or a **base project for an AI productivity tool**, AI Notes is a clean, hackable starting point.
 
@@ -60,7 +60,7 @@ Whether you are looking for a **free note-taking app**, a **self-hosted notes se
 
 ## Features
 
-- **AI note assistant** — summarize, expand, and rewrite notes with OpenAI (`GPT-4o-mini`), capped at 10 actions per user per day.
+- **AI note assistant** — use Puter.js in the browser for summarize, expand, rewrite, explain, title, translation, and todos, with optional OpenAI server fallback.
 - **Full note CRUD** — create, edit, read, and delete notes through the UI or the REST API.
 - **Real-time search** — instant filtering across titles and content.
 - **Tags & colors** — organize notes with colored tags and filter by tag.
@@ -84,7 +84,7 @@ Whether you are looking for a **free note-taking app**, a **self-hosted notes se
 |-------|-----------|
 | **Backend** | Python 3, Flask (blueprints) |
 | **Database** | SQLite (auto-migrating, auto-seeding) |
-| **AI** | OpenAI Chat Completions API (`gpt-4o-mini`) |
+| **AI** | Puter.js browser inference with optional OpenAI server fallback |
 | **Frontend** | HTML5, JavaScript, FSCSS |
 | **Styling engine** | FSCSS — a custom pure-Python CSS preprocessor |
 | **Auth** | Flask sessions + SHA-256 password hashing |
@@ -109,7 +109,8 @@ Whether you are looking for a **free note-taking app**, a **self-hosted notes se
 
 - Python 3.10 or newer
 - `pip` and `venv`
-- (Optional) An OpenAI API key for AI features
+- A browser with JavaScript enabled for Puter.js AI features
+- (Optional) An OpenAI API key for server fallback
 
 ### 1. Clone the repository
 
@@ -150,7 +151,7 @@ python app.py
 
 Open **http://localhost:5000**.
 
-> A default superadmin account is auto-seeded on first run: **username `admin` / password `admin123`**. Change it immediately in production.
+> The superadmin dashboard is at `/superadmin` and is secured by `SUPERADMIN_USERNAME` / `SUPERADMIN_PASSWORD` from the environment — no DB account is seeded.
 
 ---
 
@@ -163,12 +164,16 @@ Create a `.env` file in the project root:
 | `SECRET_KEY` | ✅ | Flask session signing key. Use a long random string. |
 | `FLASK_DEBUG` | ➖ | `true` for local dev, `false` in production. |
 | `OPENAI_API_KEY` | ⚪ | Enables the AI summarize/expand/rewrite features. |
-| `DATABASE_PATH` | ⚪ | Custom SQLite path (e.g. for a persistent disk on Render). _Planned — not yet read by `database.py`._ |
+| `SUPERADMIN_USERNAME` | ⚪ | Username for the `/superadmin` login (default `superadmin`). |
+| `SUPERADMIN_PASSWORD` | ⚪ | Password for the `/superadmin` login. Ignored/disabled when empty. |
+| `DATABASE_PATH` | ⚪ | Custom SQLite path (e.g. `/var/data/AI_Notes.db` on Render). Defaults to `AI_Notes.db` next to the source. |
 
 ```env
 SECRET_KEY=change-this-to-a-random-string
 OPENAI_API_KEY=sk-your-key-here
 FLASK_DEBUG=false
+SUPERADMIN_USERNAME=superadmin
+SUPERADMIN_PASSWORD=change-this-superadmin-password
 ```
 
 ---
@@ -207,7 +212,7 @@ Render's default filesystem is **ephemeral**, so `AI_Notes.db` is wiped on every
 1. Under **Settings → Disks**, add a disk (e.g. mount path `/var/data`).
 2. Point the app at it, e.g. set `DATABASE_PATH=/var/data/AI_Notes.db`.
 
-> `database.py` currently hardcodes the DB path next to the source. Reading `DATABASE_PATH` from the environment is required before the disk above takes effect.
+> `database.py` reads `DATABASE_PATH` from the environment, so pointing it at the mounted disk (e.g. `DATABASE_PATH=/var/data/AI_Notes.db`) is all that is required.
 
 For a production workload, consider migrating to a managed Postgres instance instead of SQLite.
 
@@ -218,7 +223,7 @@ For a production workload, consider migrating to a managed Postgres instance ins
 ```
 zerotrace-ai-notes/
 ├── app.py                  # Main Flask app: pages, notes, AI, tags, settings
-├── database.py             # SQLite setup, migrations, admin seeding
+├── database.py             # SQLite setup & migrations
 ├── requirements.txt        # Python dependencies
 ├── .env.example            # Environment variable template
 ├── API.md                  # Full REST API reference
@@ -246,7 +251,8 @@ zerotrace-ai-notes/
 │   ├── demo_index.html     # Main notes application
 │   ├── trash.html          # Recycle bin
 │   ├── settings.html       # User settings
-│   └── superadmin.html     # Admin dashboard
+│   └── superadmin.html     # Superadmin dashboard
+│   └── superadmin_login.html # Superadmin login
 │
 └── static/
     ├── css/
@@ -269,7 +275,7 @@ All `POST`/`PUT` endpoints accept `Content-Type: application/json` and return JS
 | `GET` | `/` | Landing page |
 | `GET` | `/app` | Notes application |
 | `GET` | `/waitlist` | Waitlist signup |
-| `GET` | `/superadmin/dashboard` | Admin dashboard |
+| `GET` | `/superadmin` | Superadmin login + dashboard |
 
 ### Notes
 
@@ -331,7 +337,8 @@ All `POST`/`PUT` endpoints accept `Content-Type: application/json` and return JS
 Yes. AI Notes is released under the MIT license and can be self-hosted at no cost.
 
 **What do I need to run the AI features?**
-An OpenAI API key (`OPENAI_API_KEY`). Without it, all non-AI features work normally.
+Puter.js runs the note actions in the browser. If Puter.js is unavailable, configure
+`OPENAI_API_KEY` to enable the server fallback.
 
 **Where is my data stored?**
 Notes are stored in a local SQLite database (`AI_Notes.db`). You own your data.
@@ -340,10 +347,13 @@ Notes are stored in a local SQLite database (`AI_Notes.db`). You own your data.
 Yes — the repo is configured for one-click deployment on Render's free tier.
 
 **Which model does the AI use?**
-OpenAI `gpt-4o-mini` via the Chat Completions API.
+Puter.js selects its hosted model. The optional server fallback uses OpenAI
+`gpt-4o-mini`.
 
-**Can I use it without OpenAI?**
-Yes. AI features simply return a "not configured" message; everything else works.
+**Does Puter.js train the model?**
+No. Puter.js provides hosted inference; it does not train or fine-tune a model.
+The application no longer includes a local ML classifier. Training would require
+a separate dataset, training pipeline, and model-serving system.
 
 ---
 

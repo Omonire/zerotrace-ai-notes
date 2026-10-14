@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Superadmin - ZeroTrace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">Zero<span>Trace</span></a>
+            <div class="nav-links">
+                <a href="/app" class="btn-ghost">App</a>
+            </div>
+        </div>
+    </nav>
+    <main class="auth-page">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>Superadmin</h1>
+                <p>Sign in with your superadmin credentials</p>
+            </div>
+            {% if not configured %}
+            <div class="auth-error" style="display:block;">Superadmin is not configured. Set <code>SUPERADMIN_USERNAME</code> and <code>SUPERADMIN_PASSWORD</code> in your environment.</div>
+            {% else %}
+            <form id="superadmin-form">
+                <div class="form-group">
+                    <label for="sa-username">Username</label>
+                    <input id="sa-username" type="text" placeholder="superadmin" autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="sa-password">Password</label>
+                    <input id="sa-password" type="password" placeholder="Your password" autocomplete="current-password" required>
+                </div>
+                <div id="sa-error" class="auth-error" style="display:none;"></div>
+                <button type="submit" class="btn-primary btn-lg btn-full" id="sa-submit">Sign In</button>
+            </form>
+            {% endif %}
+        </div>
+    </main>
+    <script>
+    (() => {
+        const form = document.getElementById("superadmin-form");
+        if (!form) return;
+        const errorEl = document.getElementById("sa-error");
+        const submitBtn = document.getElementById("sa-submit");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            errorEl.style.display = "none";
+            const username = document.getElementById("sa-username").value.trim();
+            const password = document.getElementById("sa-password").value;
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Signing in...";
+
+            try {
+                const res = await fetch("/superadmin/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    window.location.href = "/superadmin";
+                } else {
+                    errorEl.textContent = data.message;
+                    errorEl.style.display = "block";
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "Sign In";
+                }
+            } catch {
+                errorEl.textContent = "Network error. Try again.";
+                errorEl.style.display = "block";
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Sign In";
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

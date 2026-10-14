@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Verify Email - ZeroTrace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    bg: '#08080c',
+                    surface: '#12141b',
+                    surface2: '#171a24',
+                    border: '#1e2130',
+                    accent: '#7c5cff',
+                    accent2: '#8f70ff',
+                },
+                fontFamily: {
+                    heading: ['Space Grotesk', 'sans-serif'],
+                    sans: ['DM Sans', 'sans-serif'],
+                    mono: ['JetBrains Mono', 'monospace'],
+                }
+            }
+        }
+    }
+    </script>
+</head>
+<body class="bg-bg text-gray-100 font-sans min-h-screen flex items-center justify-center">
+    <div class="text-center max-w-md mx-auto px-6">
+        <div id="loading" class="py-10">
+            <div class="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p class="text-gray-400">Verifying your email...</p>
+        </div>
+        <div id="success" class="hidden py-10">
+            <div class="w-16 h-16 bg-green-500/10 border border-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg class="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+            </div>
+            <h1 class="text-2xl font-extrabold mb-2">Email verified!</h1>
+            <p class="text-gray-400 mb-6">Your account is now fully activated.</p>
+            <a href="/app" class="bg-accent hover:bg-accent/90 text-white font-semibold text-sm px-6 py-3 rounded-xl transition-all inline-block">Open Notes</a>
+        </div>
+        <div id="error" class="hidden py-10">
+            <div class="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg class="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+            </div>
+            <h1 class="text-2xl font-extrabold mb-2">Verification failed</h1>
+            <p class="text-gray-400 mb-6" id="error-msg">Invalid or expired token.</p>
+            <a href="/" class="border border-border hover:border-accent/40 text-white font-semibold text-sm px-6 py-3 rounded-xl transition-all inline-block">Go Home</a>
+        </div>
+    </div>
+    <script>
+    (async () => {
+        const token = "{{ token }}";
+        if (!token) { document.getElementById("loading").classList.add("hidden"); document.getElementById("error").classList.remove("hidden"); return; }
+        try {
+            const res = await fetch("/api/verify-email", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({token})
+            });
+            const data = await res.json();
+            document.getElementById("loading").classList.add("hidden");
+            if (data.success) { document.getElementById("success").classList.remove("hidden"); }
+            else { document.getElementById("error").classList.remove("hidden"); document.getElementById("error-msg").textContent = data.message; }
+        } catch {
+            document.getElementById("loading").classList.add("hidden");
+            document.getElementById("error").classList.remove("hidden");
+        }
+    })();
+    </script>
+</body>
+</html>
