@@ -112,9 +112,12 @@ def bot_chat():
     )
 
     provider = (data.get("provider") or "auto").lower()
+    use_local = provider == "local" or (
+        provider != "openai" and not ai.is_configured() and ai.local_available()
+    )
 
     try:
-        if provider == "local":
+        if use_local:
             if not ai.local_available():
                 return jsonify({"success": False, "message": "Local model is not available. Install PyTorch and train a checkpoint, or pick another model."}), 503
             reply, tokens = ai.complete_local(clean[-20:], system=system, max_tokens=250)

@@ -12,3 +12,7 @@ Templates/static/
 
 # Playwright artifacts
 .playwright-mcp/
+
+# ML training outputs
+ml/runs/
+ml/data/.cache/

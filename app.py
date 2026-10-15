@@ -699,10 +699,13 @@ import ai
 
 @app.route("/api/ai/config", methods=["GET"])
 def ai_config():
+    local = ai.local_available()
     return jsonify({
         "configured": ai.is_configured(),
         "model": ai.model(),
         "backend": ai.backend(),
+        "local_available": local,
+        "local_model": ai.local_model_name() if local else None,
         "actions": sorted(ai.ACTIONS),
         "daily_limit": ai.DAILY_LIMIT,
     })
@@ -716,6 +719,7 @@ def ai_action(action):
 
     data = request.get_json(silent=True) or {}
     content = (data.get("content") or "").strip()
+    provider = (data.get("provider") or "auto").lower()
     if not content:
         return jsonify({"success": False, "message": "No content to process"}), 400
 
@@ -728,7 +732,13 @@ def ai_action(action):
         db.close()
 
     try:
-        result_text, tokens = ai.run(action, content, model_name=data.get("model"))
+        use_local = provider == "local" or (
+            provider == "auto" and not ai.is_configured() and ai.local_available()
+        )
+        if use_local:
+            result_text, tokens = ai.run_local(action, content)
+        else:
+            result_text, tokens = ai.run(action, content, model_name=data.get("model"))
     except ai.AIError as exc:
         return jsonify({"success": False, "message": exc.message}), exc.status
 
@@ -746,7 +756,7 @@ def ai_action(action):
         "success": True,
         "result": result_text,
         "action": action,
-        "backend": ai.backend(),
+        "backend": ai.backend(provider) if provider != "auto" else ai.backend(),
         "tokens_used": tokens,
         "remaining_today": max(0, ai.DAILY_LIMIT - (usage + 1))
     })

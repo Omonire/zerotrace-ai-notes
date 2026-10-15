@@ -1,0 +1,57 @@
+AI Notes is an open source note-taking application built with Python and Flask.
+It stores every note in a local SQLite database so that the person running it
+keeps full ownership of their own data. The goal is simple: give people a fast,
+private, hackable place to write things down and think.
+
+A note is a small thing. It has a title, a body, a color, and a handful of tags.
+You can create a note, edit it, search across it, and delete it when you no
+longer need it. Tags make it easy to group related ideas without a rigid folder
+structure, and colors give each note a quick visual identity in the list.
+
+The assistant is the part that makes the app feel alive. Ask it to summarize a
+long note and it returns the essential points. Ask it to expand a rough outline
+and it fills in the missing detail. Ask it to rewrite a paragraph in a different
+register and the tone shifts. The assistant reads your notes as context, so its
+answers stay grounded in what you actually wrote.
+
+Language models do not understand words the way people do. They read text as a
+sequence of tokens and learn to predict the next token from the ones before it.
+Train the model on enough text and a remarkable thing happens: to predict the
+next token well it must internalize grammar, facts, and a little bit of
+reasoning. The transformer is the architecture that made this practical.
+
+The transformer reads the whole sequence at once instead of one step at a time.
+Each token is turned into a vector, and every token asks a question of every
+other token: which of you are relevant to me right now? Those questions are the
+queries, the answers are the keys, and the information that flows back is the
+value. This is attention, and it lets the model weigh distant words as easily as
+near ones.
+
+Because the model must never see the future when predicting the next token, the
+attention is masked. A lower triangular mask hides every position after the
+current one, so the prediction for a given token depends only on the tokens that
+came before it. This single constraint turns a general sequence encoder into a
+language model that can generate text one token at a time.
+
+Stack a few of these blocks together, add layer normalization, residual
+connections, and a feed-forward network, and you have a decoder. Feed it a
+prompt, sample from its probability distribution, append the sampled token, and
+repeat. That loop is how a language model writes. Temperature controls how
+adventurous the sampling is, while top-k and top-p trim the unlikely tail.
+
+Training is a loop of its own. Take a batch of text, split it into inputs and
+targets, run a forward pass, compute the cross-entropy loss, run backpropagation,
+and nudge every weight a little in the direction that lowers the loss. Do this
+many thousands of times and the loss falls. The model starts by producing noise
+and ends by producing sentences that sound like the corpus it studied.
+
+The best way to understand any of this is to build it. Write the tokenizer by
+hand. Write attention by hand. Watch the loss curve bend downward and sample a
+few tokens to see what the model has learned so far. Reading about a transformer
+is useful; training one, even a tiny one, is unforgettable.
+
+Notes are personal. A note might be a shopping list, a fragment of a song, a
+plan for the week, or the first sentence of a novel. The job of a good tool is
+to stay out of the way and let the words arrive. Everything else, the database,
+the search, the assistant, is there to serve that quiet moment of thinking.
+

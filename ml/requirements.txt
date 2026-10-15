@@ -1,0 +1,5 @@
+# Dependencies for training the from-scratch transformer LM (ml/).
+# Kept separate from the web app requirements so deployments stay lean.
+# Install into a Python 3.10-3.12 environment (PyTorch may lack 3.13+ wheels):
+#   pip install -r ml/requirements.txt
+torch>=2.2

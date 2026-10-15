@@ -364,11 +364,12 @@
   async function updateAiProviderStatus() {
     if (!aiProvider) return;
     try {
-      const response = await fetch("/api/ai/config");
-      const config = await response.json();
-      if (window.puter?.ai?.chat) aiProvider.textContent = "Provider: Puter (external)";
-      else if (config.backend === "openai") aiProvider.textContent = "Provider: OpenAI fallback";
-      else aiProvider.textContent = "Provider unavailable";
+      const config = await (await fetch("/api/ai/config")).json();
+      const parts = [];
+      if (window.puter?.ai?.chat) parts.push("Puter (browser)");
+      if (config.configured) parts.push("OpenAI");
+      if (config.local_available) parts.push("Local" + (config.local_model ? ` (${config.local_model})` : ""));
+      aiProvider.textContent = parts.length ? "Provider: " + parts.join(" + ") : "Provider unavailable";
     } catch {
       aiProvider.textContent = "Provider unavailable";
     }
@@ -434,7 +435,8 @@
         aiResultContent = data.result;
         aiResultText.textContent = data.result;
         aiResult.classList.remove("hidden");
-        showToast(`${data.backend === "puter" ? "Puter" : "AI"} ${action} complete`, "ai");
+        const who = data.backend === "puter" ? "Puter" : data.backend === "local" ? "Local model" : "AI";
+        showToast(`${who} ${action} complete`, "ai");
         fetchAiUsage();
       } else { showToast(data.message || "AI failed", "error"); }
     } catch { showToast("Network error", "error"); }
@@ -521,6 +523,7 @@
   const chatSend = document.getElementById("chat-send");
   const chatClose = document.getElementById("chat-close");
   const chatClear = document.getElementById("chat-clear");
+  const chatModel = document.getElementById("chat-model");
   let chatHistory = [];
   let chatBusy = false;
 
@@ -615,6 +618,7 @@
     e.preventDefault();
     const text = chatInput.value.trim();
     if (!text || chatBusy) return;
+    const provider = (chatModel && chatModel.value) || "auto";
     chatBusy = true;
     chatSend.disabled = true;
     chatHistory.push({ role: "user", content: text });
@@ -626,17 +630,22 @@
       const res = await fetch("/api/bot/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: chatHistory }),
+        body: JSON.stringify({ messages: chatHistory, provider }),
       });
       const data = await res.json();
       typing.remove();
       if (data.success) {
         chatHistory.push({ role: "assistant", content: data.reply });
         const bubble = addMessage("assistant", data.reply);
+        const meta = [];
+        if (data.backend) meta.push(data.backend === "local" ? "Local model" : data.backend);
         if (Array.isArray(data.sources) && data.sources.length) {
+          meta.push("From: " + data.sources.slice(0, 4).map((s) => '"' + s.title + '"').join(", "));
+        }
+        if (meta.length) {
           const src = document.createElement("div");
           src.className = "mt-2 pt-2 border-t border-border text-[11px] text-gray-500";
-          src.textContent = "From: " + data.sources.slice(0, 4).map((s) => '"' + s.title + '"').join(", ");
+          src.textContent = meta.join(" · ");
           bubble.appendChild(src);
         }
       } else {

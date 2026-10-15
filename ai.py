@@ -8,8 +8,14 @@ API used across the app:
     ai.run(action, content) -> (text, tokens)
     ai.complete(messages)   -> (text, tokens)
 
-Uses OpenAI when configured. Browser clients may use Puter.js directly;
-the server does not train or load a local ML model.
+Three backends are supported:
+
+    * ``puter``  - browser inference via Puter.js (handled in the frontend)
+    * ``openai`` - server inference via the OpenAI Chat Completions API
+    * ``local``  - the from-scratch transformer in ``ml/`` (needs PyTorch)
+
+The server uses OpenAI when configured, otherwise the local model when a
+checkpoint is available.
 """
 
 import json
@@ -20,6 +26,7 @@ import urllib.request
 DEFAULT_MODEL = "gpt-4o-mini"
 DAILY_LIMIT = int(os.environ.get("AI_DAILY_LIMIT", "10"))
 REQUEST_TIMEOUT = int(os.environ.get("OPENAI_TIMEOUT", "30"))
+LOCAL_MODEL_PATH = os.environ.get("LOCAL_MODEL_PATH", "ml/runs/shakespeare-mini")
 
 ACTIONS = {
     "summarize": "Summarize the following note concisely. Keep the key points and main ideas. Output only the summary, no preamble.",
@@ -55,8 +62,66 @@ def is_configured():
     return bool(api_key())
 
 
-def backend():
-    return "openai" if api_key() else "puter"
+def local_available():
+    """True when PyTorch is importable and a local checkpoint exists."""
+    try:
+        from ml import backend as local_backend
+    except Exception:
+        return False
+    try:
+        return local_backend.is_available(LOCAL_MODEL_PATH)
+    except Exception:
+        return False
+
+
+def local_model_name():
+    return os.path.basename(LOCAL_MODEL_PATH.rstrip("/\\")) or "local"
+
+
+def backend(provider=None):
+    """Resolve the server-side backend, honouring an explicit provider."""
+    if provider == "local":
+        return "local"
+    if provider == "openai":
+        return "openai"
+    if provider == "puter":
+        return "puter"
+    if api_key():
+        return "openai"
+    if local_available():
+        return "local"
+    return "puter"
+
+
+def _local_lm():
+    try:
+        from ml import backend as local_backend
+    except Exception:
+        raise AIError("Local model unavailable (PyTorch is not installed)", 503)
+    try:
+        return local_backend.get_local_model(LOCAL_MODEL_PATH)
+    except Exception as exc:
+        raise AIError("Local model unavailable: " + str(exc), 503)
+
+
+def complete_local(messages, system=None, max_tokens=250):
+    """Generate a chat reply with the local from-scratch model."""
+    lm = _local_lm()
+    reply = lm.chat(messages, notes_context=system or "", max_new_tokens=max_tokens)
+    return reply, 0
+
+
+def run_local(action, content, max_tokens=200):
+    """Attempt a note action (summarize/expand/...) with the local model."""
+    if action not in ACTIONS:
+        raise AIError("Invalid action. Use: " + ", ".join(sorted(ACTIONS)), 400)
+    content = (content or "").strip()
+    if not content:
+        raise AIError("No content to process", 400)
+    lm = _local_lm()
+    prompt = ACTIONS[action] + "\n\n" + content + "\n\nOutput:"
+    text = lm.generate(prompt, max_new_tokens=max_tokens)
+    return text.strip(), 0
 
 
 def _client():
