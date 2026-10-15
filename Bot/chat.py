@@ -111,8 +111,19 @@ def bot_chat():
         + context
     )
 
+    provider = (data.get("provider") or "auto").lower()
+
     try:
-        reply, tokens = ai.complete(clean[-20:], system=system, max_tokens=1500)
+        if provider == "local":
+            if not ai.local_available():
+                return jsonify({"success": False, "message": "Local model is not available. Install PyTorch and train a checkpoint, or pick another model."}), 503
+            reply, tokens = ai.complete_local(clean[-20:], system=system, max_tokens=250)
+            model_name = ai.local_model_name()
+            backend_name = "local"
+        else:
+            reply, tokens = ai.complete(clean[-20:], system=system, max_tokens=1500)
+            model_name = ai.model()
+            backend_name = ai.backend(provider)
     except ai.AIError as exc:
         return jsonify({"success": False, "message": exc.message}), exc.status
 
@@ -120,7 +131,7 @@ def bot_chat():
         "success": True,
         "reply": reply,
         "tokens_used": tokens,
-        "model": ai.model(),
-        "backend": ai.backend(),
+        "model": model_name,
+        "backend": backend_name,
         "sources": [{"id": row["id"], "title": row["title"]} for row in notes],
     })
