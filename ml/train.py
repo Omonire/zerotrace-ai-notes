@@ -1,8 +1,15 @@
 """Train the from-scratch transformer language model.
 
-Examples:
+One-shot:
     python -m ml.train --preset small --steps 3000
-    python -m ml.train --data ml/data/tinyshakespeare.txt --tokenizer bpe --vocab-size 1024
+
+Continuous / 24-7 (restart-safe; e.g. a Render worker):
+    python -m ml.train --resume --continuous --preset small --out /var/data/model
+
+``--resume`` loads ``<out>/ckpt.pt`` if present and keeps training, so the
+process can be restarted (deploys, crashes, disk reboots) without losing
+progress. ``--continuous`` loops training cycles forever and saves checkpoints
+as it goes; SIGINT/SIGTERM triggers a clean checkpoint save before exit.
 """
 
 from __future__ import annotations
@@ -11,6 +18,7 @@ import argparse
 import hashlib
 import math
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -19,7 +27,7 @@ import torch
 
 from .bpe import BPETokenizer
 from .config import GPTConfig, PRESETS, apply_preset
-from .dataset import default_data_path, split_ids
+from .dataset import default_data_path, get_batch, split_ids
 from .model import GPT
 from .tokenizer import CharTokenizer
 
@@ -61,6 +69,12 @@ def build_tokenizer(kind: str, text: str, vocab_size: int):
     return BPETokenizer.train(sample, vocab_size=vocab_size)
 
 
+def load_tokenizer(run_dir: Path, kind: str):
+    if kind == "char":
+        return CharTokenizer.load(run_dir / "tokenizer.json")
+    return BPETokenizer.load(run_dir / "tokenizer.json")
+
+
 def encode_with_cache(text: str, tokenizer, kind: str, cache_dir: Path) -> list[int]:
     cache_dir.mkdir(parents=True, exist_ok=True)
     key = hashlib.md5(f"{kind}:{len(text)}:{text[:2000]}".encode("utf-8")).hexdigest()[:12]
@@ -78,8 +92,6 @@ def encode_with_cache(text: str, tokenizer, kind: str, cache_dir: Path) -> list[
 
 @torch.no_grad()
 def estimate_loss(model: GPT, splits, config, batch_size, device, iters):
-    from .dataset import get_batch
-
     model.eval()
     out = {}
     for name, data in splits.items():
@@ -93,7 +105,7 @@ def estimate_loss(model: GPT, splits, config, batch_size, device, iters):
     return out
 
 
-def save_checkpoint(out_dir: Path, model, config, tokenizer, kind, metrics, args) -> None:
+def save_checkpoint(out_dir: Path, model, config, tokenizer, kind, metrics) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     tokenizer.save(out_dir / "tokenizer.json")
     tmp = out_dir / "ckpt.pt.tmp"
@@ -109,19 +121,26 @@ def save_checkpoint(out_dir: Path, model, config, tokenizer, kind, metrics, args
     os.replace(tmp, out_dir / "ckpt.pt")
 
 
-def main() -> None:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+def load_checkpoint(run_dir: Path, device: str):
+    ckpt = torch.load(run_dir / "ckpt.pt", map_location=device, weights_only=False)
+    kind = ckpt.get("tokenizer_type", "char")
+    tokenizer = load_tokenizer(run_dir, kind)
+    config = GPTConfig(**ckpt["config"])
+    model = GPT(config).to(device)
+    model.load_state_dict(ckpt["model_state"])
+    return model, tokenizer, config, kind, ckpt.get("metrics", {})
 
+
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a small GPT from scratch.")
     parser.add_argument("--data", nargs="+", default=None)
-    parser.add_argument("--out", default="ml/runs/run")
+    parser.add_argument("--out", default=os.environ.get("LOCAL_RUN_DIR", "ml/runs/run"))
     parser.add_argument("--preset", choices=sorted(PRESETS), default="small")
     parser.add_argument("--tokenizer", choices=["bpe", "char"], default="bpe")
     parser.add_argument("--vocab-size", type=int, default=1024, help="BPE target vocab")
     parser.add_argument("--max-chars", type=int, default=1_000_000,
                         help="cap corpus characters used for training")
-    parser.add_argument("--steps", type=int, default=3000)
+    parser.add_argument("--steps", type=int, default=3000, help="steps per training cycle")
     parser.add_argument("--batch-size", type=int, default=48)
     parser.add_argument("--lr", type=float, default=6e-4)
     parser.add_argument("--min-lr", type=float, default=6e-5)
@@ -132,59 +151,111 @@ def main() -> None:
     parser.add_argument("--device", default="auto")
     parser.add_argument("--sample-prompt", default="ROMEO: ")
     parser.add_argument("--sample-tokens", type=int, default=200)
-    args = parser.parse_args()
+    parser.add_argument("--resume", action="store_true",
+                        help="continue from <out>/ckpt.pt if it exists")
+    parser.add_argument("--init-from", default=None,
+                        help="resume from a specific run directory instead of --out")
+    parser.add_argument("--continuous", action="store_true",
+                        help="loop training cycles forever (24/7 worker)")
+    return parser.parse_args()
 
+
+def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+
+    args = parse_args()
     torch.manual_seed(args.seed)
     device = pick_device(args.device)
     out_dir = Path(args.out)
+    cache_dir = Path(__file__).resolve().parent / "data" / ".cache"
 
-    data_paths = args.data or [default_data_path()]
-    text = load_text(data_paths)
+    text = load_text(args.data or [default_data_path()])
     if args.max_chars and len(text) > args.max_chars:
         text = text[: args.max_chars]
 
-    tokenizer = build_tokenizer(args.tokenizer, text, args.vocab_size)
-    cache_dir = Path(__file__).resolve().parent / "data" / ".cache"
-    ids = encode_with_cache(text, tokenizer, args.tokenizer, cache_dir)
+    resume_dir = Path(args.init_from) if args.init_from else out_dir
+    can_resume = (args.resume or args.init_from) and (resume_dir / "ckpt.pt").exists()
+
+    if can_resume:
+        model, tokenizer, config, kind, metrics = load_checkpoint(resume_dir, device)
+        print(f"resumed from {resume_dir / 'ckpt.pt'} | params={model.num_params():,}", flush=True)
+    else:
+        tokenizer = build_tokenizer(args.tokenizer, text, args.vocab_size)
+        kind = args.tokenizer
+        config = apply_preset(GPTConfig(vocab_size=tokenizer.vocab_size), args.preset)
+        model = GPT(config).to(device)
+        metrics = {}
+
+    ids = encode_with_cache(text, tokenizer, kind, cache_dir)
     train_data, val_data = split_ids(ids, val_frac=0.1)
     splits = {"train": train_data, "val": val_data}
-
-    config = apply_preset(GPTConfig(vocab_size=tokenizer.vocab_size), args.preset)
     config.block_size = min(config.block_size, max(2, len(train_data) - 1))
-
-    model = GPT(config).to(device)
-    print(f"device={device} preset={args.preset} tokenizer={args.tokenizer} "
-          f"vocab={tokenizer.vocab_size} params={model.num_params():,} tokens={len(ids):,}")
+    model.to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
-    best_val = float("inf")
-    t0 = time.time()
+    best_val = metrics.get("val", float("inf"))
+    last_metrics = metrics or {"train": float("nan"), "val": float("nan")}
 
-    for step in range(args.steps):
-        lr = lr_at(step, args.steps, args.warmup, args.lr, args.min_lr)
-        for group in optimizer.param_groups:
-            group["lr"] = lr
+    print(f"device={device} preset={args.preset} tokenizer={kind} "
+          f"vocab={tokenizer.vocab_size} params={model.num_params():,} tokens={len(ids):,} "
+          f"continuous={args.continuous}", flush=True)
 
-        from .dataset import get_batch
+    stop = {"flag": False}
 
-        batch = get_batch(train_data, config.block_size, args.batch_size, device)
-        _, loss = model(batch.x, batch.y)
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+    def _handle(signum, _frame):
+        stop["flag"] = True
+        print(f"\nreceived signal {signum}; will checkpoint and exit.", flush=True)
 
-        if step % args.eval_interval == 0 or step == args.steps - 1:
-            metrics = estimate_loss(model, splits, config, args.batch_size, device, args.eval_iters)
-            print(f"step {step:5d} | train {metrics['train']:.3f} | "
-                  f"val {metrics['val']:.3f} | lr {lr:.2e} | {time.time() - t0:.0f}s")
-            if metrics["val"] <= best_val:
-                best_val = metrics["val"]
-                save_checkpoint(out_dir, model, config, tokenizer, args.tokenizer, metrics, args)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, _handle)
+        except (ValueError, OSError):
+            pass
 
-    start = torch.tensor([tokenizer.encode(args.sample_prompt, add_bos=True)], device=device)
-    out_ids = model.generate(start, max_new_tokens=args.sample_tokens, temperature=0.8, top_k=40)
-    print("\nsample:\n" + tokenizer.decode(out_ids[0].tolist()))
+    cycle = 0
+    while True:
+        cycle += 1
+        if args.continuous:
+            print(f"=== cycle {cycle} ===", flush=True)
+        t0 = time.time()
+
+        for step in range(args.steps):
+            lr = lr_at(step, args.steps, args.warmup, args.lr, args.min_lr)
+            for group in optimizer.param_groups:
+                group["lr"] = lr
+
+            batch = get_batch(train_data, config.block_size, args.batch_size, device)
+            _, loss = model(batch.x, batch.y)
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+
+            if stop["flag"]:
+                save_checkpoint(out_dir, model, config, tokenizer, kind, last_metrics)
+                print("checkpoint saved on shutdown.", flush=True)
+                return
+
+            if step % args.eval_interval == 0 or step == args.steps - 1:
+                last_metrics = estimate_loss(
+                    model, splits, config, args.batch_size, device, args.eval_iters
+                )
+                print(f"cycle {cycle} step {step:5d} | train {last_metrics['train']:.3f} | "
+                      f"val {last_metrics['val']:.3f} | lr {lr:.2e} | {time.time() - t0:.0f}s",
+                      flush=True)
+                # Continuous training always persists the latest state.
+                if args.continuous or last_metrics["val"] <= best_val:
+                    save_checkpoint(out_dir, model, config, tokenizer, kind, last_metrics)
+                    best_val = min(best_val, last_metrics["val"])
+
+        if args.sample_tokens > 0:
+            start = torch.tensor([tokenizer.encode(args.sample_prompt, add_bos=True)], device=device)
+            out_ids = model.generate(start, max_new_tokens=args.sample_tokens, temperature=0.8, top_k=40)
+            print(f"\ncycle {cycle} sample:\n" + tokenizer.decode(out_ids[0].tolist()) + "\n", flush=True)
+
+        if not args.continuous:
+            break
 
 
 if __name__ == "__main__":

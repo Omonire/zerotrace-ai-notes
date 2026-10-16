@@ -35,3 +35,31 @@ services:
     #   envVars:
     #     - key: DATABASE_PATH
     #       value: /var/data/AI_Notes.db
+
+  # ── 24/7 training worker ────────────────────────────────────────
+  # Trains the from-scratch model continuously and writes checkpoints to a
+  # persistent disk. Restart-safe: on every boot it resumes from ckpt.pt, so
+  # deploys/crashes never lose progress.
+  #
+  # COST: background workers are NOT on the free plan. This needs a paid
+  # instance (plan: starter, ~$7/mo) plus a disk. Renders are CPU-only, so
+  # training is slow but steady.
+  #
+  # The worker keeps the model on ITS disk; the web service can't mount the
+  # same disk. To serve the trained model, copy checkpoints from the disk to
+  # wherever your app reads them (e.g. commit, object storage, or point the
+  # web service at a shared path if you later move to a single service).
+  - type: worker
+    name: zerotrace-trainer
+    runtime: python
+    plan: starter
+    buildCommand: pip install torch --index-url https://download.pytorch.org/whl/cpu
+    startCommand: python -m ml.train --resume --continuous --preset small --steps 3000 --out /var/data/shakespeare-small
+    autoDeploy: true
+    disk:
+      name: trainer-checkpoints
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
