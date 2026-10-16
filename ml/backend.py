@@ -27,6 +27,22 @@ def _tokenizer_from(run_dir: Path, kind: str):
     return BPETokenizer.load(run_dir / "tokenizer.json")
 
 
+def _load_ckpt(path: Path, device: str, attempts: int = 3):
+    """Load a checkpoint, tolerating a concurrent writer replacing the file."""
+    import time
+
+    import torch
+
+    last_exc = None
+    for _ in range(attempts):
+        try:
+            return torch.load(path, map_location=device, weights_only=False)
+        except Exception as exc:  # transient read during an in-progress save
+            last_exc = exc
+            time.sleep(0.5)
+    raise last_exc
+
+
 class LocalLM:
     def __init__(self, model, tokenizer, device: str, run_dir: Path):
         self.model = model
@@ -49,7 +65,7 @@ class LocalLM:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+        ckpt = _load_ckpt(ckpt_path, device)
         tokenizer = _tokenizer_from(run_dir, ckpt.get("tokenizer_type", "char"))
         config = GPTConfig(**ckpt["config"])
         model = GPT(config).to(device)

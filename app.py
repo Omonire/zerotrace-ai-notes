@@ -114,6 +114,11 @@ def get_ai_usage_today(db, user_id):
 
 # ─── Pages ──────────────────────────────────────────────────────
 
+@app.route("/healthz")
+def healthz():
+    return jsonify({"status": "ok"}), 200
+
+
 @app.route("/")
 def landing():
     return render_template("landing.html", signed_in="user_id" in session)

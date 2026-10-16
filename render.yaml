@@ -1,0 +1,37 @@
+# Render Blueprint for AI Notes by ZeroTrace.
+# Deploy: Render Dashboard -> New -> Blueprint -> pick this repo.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: zerotrace-ai-notes
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_DEBUG
+        value: "false"
+      # Set these in the Render dashboard (sync:false keeps them out of git).
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPERADMIN_USERNAME
+        value: superadmin
+      - key: SUPERADMIN_PASSWORD
+        sync: false
+      - key: AI_DAILY_LIMIT
+        value: "10"
+    # Persistent SQLite is NOT possible on the free plan (no disks).
+    # On a paid instance, add a disk and point DATABASE_PATH at it, e.g.:
+    #   disk:
+    #     name: data
+    #     mountPath: /var/data
+    #     sizeGB: 1
+    #   envVars:
+    #     - key: DATABASE_PATH
+    #       value: /var/data/AI_Notes.db

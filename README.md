@@ -182,6 +182,19 @@ SUPERADMIN_PASSWORD=change-this-superadmin-password
 
 Render builds directly from a Git repo and runs the app behind a production WSGI server.
 
+### One-click (Blueprint)
+
+This repo ships a `render.yaml` Blueprint, so you can skip the manual setup below:
+
+1. Push your code to GitHub.
+2. In the [Render Dashboard](https://dashboard.render.com), click **New → Blueprint** and pick this repo.
+3. Render reads `render.yaml`, builds with `pip install -r requirements.txt`, serves with
+   `gunicorn app:app`, and health-checks `/healthz`.
+4. Fill in the secret env vars it prompts for (`OPENAI_API_KEY`, `SUPERADMIN_PASSWORD`);
+   `SECRET_KEY` is generated automatically.
+
+### Manual setup
+
 ### Prerequisites
 
 - Push the repo to GitHub (or GitLab/Bitbucket).

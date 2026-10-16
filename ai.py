@@ -26,7 +26,7 @@ import urllib.request
 DEFAULT_MODEL = "gpt-4o-mini"
 DAILY_LIMIT = int(os.environ.get("AI_DAILY_LIMIT", "10"))
 REQUEST_TIMEOUT = int(os.environ.get("OPENAI_TIMEOUT", "30"))
-LOCAL_MODEL_PATH = os.environ.get("LOCAL_MODEL_PATH", "ml/runs/shakespeare-mini")
+LOCAL_MODEL_PATH = os.environ.get("LOCAL_MODEL_PATH", "ml/runs/shakespeare-small")
 
 ACTIONS = {
     "summarize": "Summarize the following note concisely. Keep the key points and main ideas. Output only the summary, no preamble.",

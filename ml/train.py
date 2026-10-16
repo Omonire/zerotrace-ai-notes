@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -95,6 +96,7 @@ def estimate_loss(model: GPT, splits, config, batch_size, device, iters):
 def save_checkpoint(out_dir: Path, model, config, tokenizer, kind, metrics, args) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     tokenizer.save(out_dir / "tokenizer.json")
+    tmp = out_dir / "ckpt.pt.tmp"
     torch.save(
         {
             "model_state": model.state_dict(),
@@ -102,8 +104,9 @@ def save_checkpoint(out_dir: Path, model, config, tokenizer, kind, metrics, args
             "tokenizer_type": kind,
             "metrics": metrics,
         },
-        out_dir / "ckpt.pt",
+        tmp,
     )
+    os.replace(tmp, out_dir / "ckpt.pt")
 
 
 def main() -> None:
